@@ -34,7 +34,9 @@ import com.drake.brv.listener.OnHoverAttachListener;
 import com.drake.brv.listener.SnapLinearSmoothScroller;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 为LinearLayoutManager添加悬停/禁用滚动特性
@@ -60,6 +62,8 @@ public class HoverLinearLayoutManager extends LinearLayoutManager {
     private int mPendingScrollPosition = RecyclerView.NO_POSITION;
     private int mPendingScrollOffset = 0;
     private boolean scrollEnabled = true;
+
+    private Map<Integer, Integer> heightMap = new HashMap<>();
 
     public HoverLinearLayoutManager(Context context) {
         super(context);
@@ -205,6 +209,18 @@ public class HoverLinearLayoutManager extends LinearLayoutManager {
     }
 
     @Override
+    public void onLayoutCompleted(RecyclerView.State state) {
+        super.onLayoutCompleted(state);
+        int count = getChildCount();
+        for (int i = 0; i < count ; i++) {
+            View view = getChildAt(i);
+            if (view != null) {
+                heightMap.put(i, view.getHeight());
+            }
+        }
+    }
+    
+    @Override
     public void scrollToPosition(int position) {
         scrollToPositionWithOffset(position, INVALID_OFFSET);
     }
@@ -260,7 +276,23 @@ public class HoverLinearLayoutManager extends LinearLayoutManager {
     @Override
     public int computeVerticalScrollOffset(RecyclerView.State state) {
         detachHover();
-        int offset = super.computeVerticalScrollOffset(state);
+//        int offset = super.computeVerticalScrollOffset(state);
+        int offset;
+        if (getChildCount() == 0) {
+            offset = 0;
+        } else {
+            try {
+                int firstVisiablePosition = findFirstVisibleItemPosition();
+                View firstVisiableView = findViewByPosition(firstVisiablePosition);
+                int offsetY = -(int) (firstVisiableView.getY());
+                for (int i = 0; i < firstVisiablePosition; i++) {
+                    offsetY += heightMap.get(i) == null ? 0 : heightMap.get(i);
+                }
+                offset = offsetY;
+            } catch (Exception e) {
+                offset = 0;
+            }
+        }
         attachHover();
         return offset;
     }
@@ -782,7 +814,7 @@ public class HoverLinearLayoutManager extends LinearLayoutManager {
             dest.writeInt(pendingScrollOffset);
         }
 
-        public static final Parcelable.Creator<SavedState> CREATOR = new Parcelable.Creator<SavedState>() {
+        public static final Creator<SavedState> CREATOR = new Creator<SavedState>() {
             @Override
             public SavedState createFromParcel(Parcel in) {
                 return new SavedState(in);

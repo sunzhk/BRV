@@ -13,5 +13,40 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+enableFeaturePreview('VERSION_CATALOGS')
+dependencyResolutionManagement {
+//    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        mavenCentral()
+        maven {
+            url "https://maven.aliyun.com/repository/google"
+        }
+        maven {
+            url "https://maven.aliyun.com/repository/jcenter"
+        }
 
+        maven {
+            allowInsecureProtocol = true
+            url 'http://nexus.closeli.cc/repository/oep/'
+        }
+        maven {
+            url 'https://jitpack.io'
+        }
+        google()
+        jcenter()
+        mavenCentral()
+    }
+
+    versionCatalogs {
+        libs {
+            version('app_lifecycle_version', '2.4.1')
+            alias('lifecycle-livedata-ktx').to('androidx.lifecycle', 'lifecycle-livedata-ktx').versionRef('app_lifecycle_version')
+            alias('lifecycle-viewmodel-ktx').to('androidx.lifecycle', 'lifecycle-viewmodel-ktx').versionRef('app_lifecycle_version')
+            alias('lifecycle-runtime-ktx-json').to('androidx.lifecycle', 'lifecycle-runtime-ktx').versionRef('app_lifecycle_version')
+            bundle('lifecycle', ['lifecycle-livedata-ktx', 'lifecycle-viewmodel-ktx', 'lifecycle-runtime-ktx-json'])
+
+            alias('recyclerView').to('androidx.recyclerview:recyclerview:1.0.0')
+        }
+    }
+}
 include ':brv', ':sample'

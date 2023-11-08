@@ -19,10 +19,10 @@
 package com.drake.brv
 
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.util.NoSuchPropertyException
 import android.view.LayoutInflater
 import android.view.View
@@ -30,10 +30,10 @@ import android.view.ViewGroup
 import androidx.annotation.IdRes
 import androidx.annotation.IntRange
 import androidx.annotation.LayoutRes
-import androidx.databinding.DataBindingUtil
-import androidx.databinding.ViewDataBinding
+import androidx.lifecycle.*
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ItemTouchHelper
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.drake.brv.animation.*
 import com.drake.brv.annotaion.AnimationType
@@ -41,11 +41,16 @@ import com.drake.brv.item.ItemBind
 import com.drake.brv.item.ItemExpand
 import com.drake.brv.item.ItemHover
 import com.drake.brv.item.ItemPosition
-import com.drake.brv.listener.*
+import com.drake.brv.listener.DefaultItemTouchCallback
+import com.drake.brv.listener.ItemDifferCallback
+import com.drake.brv.listener.OnBindViewHolderListener
+import com.drake.brv.listener.OnHoverAttachListener
+import com.drake.brv.listener.ProxyDiffCallback
+import com.drake.brv.listener.throttleClick
 import com.drake.brv.utils.BRV
-import com.drake.brv.utils.setDifferModels
+import com.drake.brv.utils.takeIfIs
+import kotlinx.coroutines.*
 import java.lang.reflect.Modifier
-import java.util.concurrent.*
 import kotlin.math.min
 
 /**
@@ -75,8 +80,11 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
 
     /** onBindViewHolder触发监听器集合 */
     var onBindViewHolders = mutableListOf<OnBindViewHolderListener>()
+    
+    var isScrolling = false
 
     companion object {
+        private const val TAG: String = "BindingAdapter"
         /**
          * 即item的layout布局中的<variable>标签内定义变量名称
          * 示例:
@@ -101,7 +109,9 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
     private var onLongClick: (BindingViewHolder.(viewId: Int) -> Unit)? = null
     private var onChecked: ((position: Int, checked: Boolean, allChecked: Boolean) -> Unit)? = null
     private var onToggle: ((position: Int, toggleModel: Boolean, end: Boolean) -> Unit)? = null
-
+    private var onDrag: ((startPosition: Int, endPosition: Int) -> Unit)? = null
+    private var onMove: ((source: BindingAdapter.BindingViewHolder, target: BindingAdapter.BindingViewHolder) -> Unit)? = null
+    private var onItemLongClick: (BindingAdapter.BindingViewHolder.() -> Unit)? = null
 
     /**
      * [onBindViewHolder]执行时回调
@@ -125,6 +135,24 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
         onPayload = block
     }
 
+    /**
+     * 拖拽结束回调(其实是没有意义的，因为拖拽过程中，dataList和UI都已经完成了移动处理，这时候再拿startPosition和endPosition只能作为统计或其他用途了)
+     */
+    fun onDrag(block: (startPosition: Int, endPosition: Int) -> Unit) {
+        onDrag = block
+    }
+
+    /**
+     * 拖拽回调，被拖拽的item在滑动过程中会多次回调
+     */
+    fun onMove(block: (source: BindingAdapter.BindingViewHolder, target: BindingAdapter.BindingViewHolder) -> Unit) {
+        onMove = block
+    }
+
+    fun onItemLongClick(block: BindingAdapter.BindingViewHolder.() -> Unit) {
+        onItemLongClick = block
+    }
+
     // </editor-fold>
 
 
@@ -133,16 +161,8 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
     private var context: Context? = null
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): BindingViewHolder {
-        val viewDataBinding = DataBindingUtil.inflate<ViewDataBinding>(
-            LayoutInflater.from(parent.context),
-            viewType,
-            parent,
-            false
-        )
-        val viewHolder =
-            if (viewDataBinding == null) BindingViewHolder(parent.getView(viewType)) else BindingViewHolder(
-                viewDataBinding
-            )
+        val viewHolder = BindingViewHolder(parent.getView(viewType))
+        viewHolder.lifecycle
         onCreate?.invoke(viewHolder, viewType)
         return viewHolder
     }
@@ -182,15 +202,32 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
         ?: throw NoSuchPropertyException("please add item model type : addType<${model.javaClass.name}>(R.layout.item)"))
     }
 
-    override fun getItemCount(): Int {
-        return headerCount + modelCount + footerCount
-    }
+    override fun getItemCount() = headerCount + modelCount + footerCount
 
     override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
         this.rv = recyclerView
         if (context == null) {
             context = recyclerView.context
         }
+        recyclerView.addOnScrollListener(object : RecyclerView.OnScrollListener() {
+            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                isScrolling = newState != RecyclerView.SCROLL_STATE_IDLE
+                Log.d(TAG, "onScrollStateChanged: $isScrolling")
+                recyclerView.layoutManager
+                    ?.takeIfIs<LinearLayoutManager>()
+                    ?.let { linearLayoutManager ->
+                        val first = linearLayoutManager.findFirstVisibleItemPosition()
+                        val last = linearLayoutManager.findLastVisibleItemPosition()
+                        for (index in first..last) {
+                            recyclerView.findViewHolderForAdapterPosition(index)?.takeIfIs<BindingViewHolder>()
+                                ?.let { viewHolder ->
+                                    Log.d(TAG, "onScrollStateChanged: reset onresume for ${viewHolder.modelPosition}")
+                                    viewHolder.observer.invoke(isScrolling)
+                                }
+                        }
+                    }
+            }
+        })
         itemTouchHelper?.attachToRecyclerView(recyclerView)
     }
 
@@ -201,6 +238,13 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
             itemAnimation.onItemEnterAnimation(holder.itemView)
             lastPosition = layoutPosition
         }
+    }
+
+    override fun onViewRecycled(holder: BindingViewHolder) {
+        holder.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+        holder.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+        holder.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+        super.onViewRecycled(holder)
     }
 
     // </editor-fold>
@@ -255,7 +299,12 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
     private val longClickListeners = HashMap<Int, (BindingViewHolder.(Int) -> Unit)?>()
 
     /** 自定义ItemTouchHelper即可设置该属性 */
-    var itemTouchHelper: ItemTouchHelper? = ItemTouchHelper(DefaultItemTouchCallback())
+    var itemTouchHelper: ItemTouchHelper? =
+        ItemTouchHelper(DefaultItemTouchCallback({ start, end ->
+            onDrag?.invoke(start, end)
+        }, { source, target ->
+            onMove?.invoke(source, target)
+        }))
         set(value) {
             if (value == null) field?.attachToRecyclerView(null) else value.attachToRecyclerView(rv)
             field = value
@@ -593,14 +642,10 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
             return if (models == null) 0 else models!!.size
         }
 
-    var _data: List<Any?>? = null
-
     /** 数据模型集合 */
-    var models: List<Any?>?
-        get() = _data
-        @SuppressLint("NotifyDataSetChanged")
+    var models: List<Any?>? = null
         set(value) {
-            _data = when (value) {
+            field = when (value) {
                 is ArrayList -> flat(value)
                 is List -> flat(value.toMutableList())
                 else -> null
@@ -627,8 +672,8 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
      * @param commitCallback 因为子线程调用[setDifferModels]刷新列表会不同步(刷新列表需要切换到主线程), 而[commitCallback]保证在刷新列表完成以后调用(运行在主线程)
      */
     fun setDifferModels(newModels: List<Any?>?, detectMoves: Boolean = true, commitCallback: Runnable? = null) {
-        val oldModels = _data
-        _data = newModels
+        val oldModels = models
+        models = newModels
         val diffResult = DiffUtil.calculateDiff(ProxyDiffCallback(newModels, oldModels, itemDifferCallback), detectMoves)
         val mainLooper = Looper.getMainLooper()
         if (Looper.myLooper() != mainLooper) {
@@ -1008,20 +1053,22 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
 
     //</editor-fold>
 
-    inner class BindingViewHolder : RecyclerView.ViewHolder {
+    inner class BindingViewHolder : RecyclerView.ViewHolder, LifecycleOwner {
 
         lateinit var _data: Any private set
         var context: Context = this@BindingAdapter.context!!
         val adapter: BindingAdapter = this@BindingAdapter
         val modelPosition get() = layoutPosition - headerCount
+        
+        private var lifecycleRegistry = LifecycleRegistry(this)
 
-        private var viewDataBinding: ViewDataBinding? = null
+        val viewHolderLifecycleScope: LifecycleCoroutineScope
+            get() = (this as LifecycleOwner).lifecycleScope
+
+        val viewHolderLifecycle: Lifecycle
+            get() = lifecycleRegistry
 
         constructor(itemView: View) : super(itemView)
-
-        constructor(viewDataBinding: ViewDataBinding) : super(viewDataBinding.root) {
-            this.viewDataBinding = viewDataBinding
-        }
 
         init {
             for (clickListener in clickListeners) {
@@ -1043,11 +1090,41 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
                     true
                 }
             }
+            itemView.setOnLongClickListener {
+                onItemLongClick?.invoke(this@BindingViewHolder)
+                true
+            }
+            lifecycleRegistry.currentState = Lifecycle.State.INITIALIZED
+            itemView.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                override fun onViewAttachedToWindow(v: View?) {
+                    observer.invoke(isScrolling)
+                }
+
+                override fun onViewDetachedFromWindow(v: View?) {
+                    handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+                    handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+                    itemView.removeOnAttachStateChangeListener(this)
+                }
+
+            })
+        }
+
+        val observer = { it: Boolean ->
+            if (!isScrolling) {
+                handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+            } else {
+                handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+            }
+        }
+        
+        override fun getLifecycle(): Lifecycle {
+            return lifecycleRegistry
         }
 
         internal fun bind(model: Any) {
+            this.lifecycleRegistry = LifecycleRegistry(this)
             this._data = model
-
+            Log.d(TAG, "viewHolder $modelPosition onBind")
             onBindViewHolders.forEach {
                 it.onBindViewHolder(rv!!, adapter, this, adapterPosition)
             }
@@ -1061,21 +1138,24 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
             }
 
             onBind?.invoke(this@BindingViewHolder)
-            try {
-                viewDataBinding?.setVariable(modelId, model)
-            } catch (e: Exception) {
-                val message =
-                    "${e.message} at file(${context.resources.getResourceEntryName(itemViewType)}.xml:0)"
-                Exception(message).printStackTrace()
-            }
-            viewDataBinding?.executePendingBindings()
+//            try {
+//                viewDataBinding?.setVariable(modelId, model)
+//            } catch (e: Exception) {
+//                val message =
+//                    "${e.message} at file(${context.resources.getResourceEntryName(itemViewType)}.xml:0)"
+//                Exception(message).printStackTrace()
+//            }
+//            viewDataBinding?.executePendingBindings()
         }
-
-
-        /**
-         * 返回匹配泛型的数据绑定对象ViewDataBinding
-         */
-        fun <B : ViewDataBinding> getBinding(): B = viewDataBinding as B
+        
+        internal fun handleLifecycleEvent(event: Lifecycle.Event) {
+            lifecycleRegistry.handleLifecycleEvent(event)
+        }
+        
+//        /**
+//         * 返回匹配泛型的数据绑定对象ViewDataBinding
+//         */
+//        fun <B : ViewDataBinding> getBinding(): B = viewDataBinding as B
 
         /**
          * 查找ItemView上的视图

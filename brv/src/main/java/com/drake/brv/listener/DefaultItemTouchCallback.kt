@@ -29,7 +29,10 @@ import java.util.*
 /**
  * 默认实现拖拽替换和侧滑删除
  */
-open class DefaultItemTouchCallback : ItemTouchHelper.Callback() {
+open class DefaultItemTouchCallback(
+    private val onDrag: ((startPosition: Int, endPosition: Int) -> Unit)? = null,
+    private val onMove: ((source: BindingAdapter.BindingViewHolder, target: BindingAdapter.BindingViewHolder) -> Unit)? = null
+) : ItemTouchHelper.Callback() {
 
     override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
         val adapter = viewHolder.bindingAdapter as? BindingAdapter
@@ -83,12 +86,28 @@ open class DefaultItemTouchCallback : ItemTouchHelper.Callback() {
     open fun onDrag(
         source: BindingAdapter.BindingViewHolder, target: BindingAdapter.BindingViewHolder
     ) {
-
+        val tempStart = startPosition
+        val tempEnd = endPosition
+        if (tempStart != null && tempEnd != null) {
+            onDrag?.invoke(tempStart, tempEnd)
+        }
+        // 拖拽结束，清理记录的position
+        startPosition = null
+        endPosition = null
     }
 
     private var lastActionState: Int = 0
     private var sourceViewHolder: BindingAdapter.BindingViewHolder? = null
     private var targetViewHolder: BindingAdapter.BindingViewHolder? = null
+
+    /**
+     * 记录拖拽开始时item的position
+     */
+    private var startPosition: Int? = null
+    /**
+     * 记录拖拽结束时item的position
+     */
+    private var endPosition: Int? = null
 
     override fun onSelectedChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
         when (actionState) {
@@ -108,7 +127,6 @@ open class DefaultItemTouchCallback : ItemTouchHelper.Callback() {
     override fun onMove(
         recyclerView: RecyclerView, source: RecyclerView.ViewHolder, target: RecyclerView.ViewHolder
     ): Boolean {
-
         val adapter = recyclerView.bindingAdapter as? BindingAdapter ?: return false
         val currentPosition = recyclerView.getChildLayoutPosition(source.itemView)
         val targetPosition = recyclerView.getChildLayoutPosition(target.itemView)
@@ -120,6 +138,11 @@ open class DefaultItemTouchCallback : ItemTouchHelper.Callback() {
                 Collections.swap(adapter.mutable, currentPosition - adapter.headerCount, targetPosition - adapter.headerCount)
                 sourceViewHolder = source
                 targetViewHolder = target
+                onMove?.invoke(source, target)
+                if (startPosition == null) {
+                    startPosition = sourceViewHolder?.modelPosition
+                }
+                endPosition = targetViewHolder?.modelPosition
             }
         }
         return false

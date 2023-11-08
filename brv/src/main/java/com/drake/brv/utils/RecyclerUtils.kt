@@ -38,6 +38,9 @@ val RecyclerView.bindingAdapter
     get() = adapter as? BindingAdapter
         ?: throw NullPointerException("RecyclerView has no BindingAdapter")
 
+val RecyclerView.safeBindingAdapter
+    get() = adapter as? BindingAdapter
+
 /**
  * 数据模型集合
  */
