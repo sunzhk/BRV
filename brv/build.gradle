@@ -5,7 +5,7 @@ apply plugin: "kotlin-kapt"
 
 apply from: '../publish_maven.gradle'
 updateArtifactId("brv-fork")
-updateModuleVersion("test_1.0.0.0")
+updateModuleVersion("1.5.5.1")
 preparePublish()
 
 android {
