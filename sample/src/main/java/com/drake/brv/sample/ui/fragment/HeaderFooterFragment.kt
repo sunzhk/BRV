@@ -1,19 +1,3 @@
-/*
- * Copyright (C) 2018 Drake, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.drake.brv.sample.ui.fragment
 
 import android.view.Menu
@@ -21,12 +5,12 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import com.drake.brv.sample.R
 import com.drake.brv.sample.databinding.FragmentHeaderFooterBinding
-import com.drake.brv.sample.model.Model
+import com.drake.brv.sample.model.SimpleModel
 import com.drake.brv.utils.bindingAdapter
 import com.drake.brv.utils.linear
 import com.drake.brv.utils.setup
 import com.drake.engine.base.EngineFragment
-import java.util.*
+import java.util.Random
 
 
 class HeaderFooterFragment :
@@ -36,20 +20,20 @@ class HeaderFooterFragment :
         setHasOptionsMenu(true)
 
         binding.rv.linear().setup {
-            addType<Model>(R.layout.item_multi_type_simple)
+            addType<SimpleModel>(R.layout.item_simple)
 
             /**
              * BRV的数据集 = Header + Footer + Models
-             * 所以本质上他们都是一组多类型而已, 分出来只是为了方便替换Models而不影响Header和Footer
+             * 所以本质上他们都是多类型而已, 区分出来只是为了修改Models时不影响Header和Footer
              */
 
-            addType<Header>(R.layout.item_multi_type_header)
-            addType<Footer>(R.layout.item_multi_type_footer)
+            addType<Header>(R.layout.item_header)
+            addType<Footer>(R.layout.item_footer)
         }.models = getData()
     }
 
-    private fun getData(): List<Model> {
-        return listOf(Model(), Model())
+    private fun getData(): List<SimpleModel> {
+        return listOf(SimpleModel(), SimpleModel())
     }
 
     override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
@@ -81,12 +65,12 @@ class HeaderFooterFragment :
         return super.onOptionsItemSelected(item)
     }
 
-    private fun randomModelList(): List<Model> {
+    private fun randomModelList(): List<SimpleModel> {
         val random = Random()
         val num = random.nextInt(3)
-        val result = arrayListOf<Model>()
+        val result = arrayListOf<SimpleModel>()
         for (i in 0..num) {
-            result.add(Model())
+            result.add(SimpleModel())
         }
         return result
     }

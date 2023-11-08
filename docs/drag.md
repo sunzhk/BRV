@@ -1,27 +1,19 @@
-<img src="https://i.loli.net/2021/08/14/9EUvCSnONYixWDT.gif" width="250"/>
+<figure markdown>
+  ![](https://i.loli.net/2021/08/14/9EUvCSnONYixWDT.gif){ width="250" }
+  <a href="https://github.com/liangjingkanji/BRV/blob/5269ef2/sample/src/main/java/com/drake/brv/sample/ui/fragment/DragFragment.kt" target="_blank"><figcaption>示例代码</figcaption></a>
+</figure>
 
-为数据模型实现接口`ItemDrag`即可开启拖拽功能
+Model实现接口`ItemDrag`即可开启拖拽功能
 
 ```kotlin
 data class DragModel(override var itemOrientationDrag: Int = ItemOrientation.ALL) : ItemDrag
 ```
 
-> 注意如果你的数据模型被Gson反序列化后, 会删除所有的字段初始化值
-
-这里我们可以重写访问函数来解决问题, 让该值固定返回
-
-```kotlin hl_lines="3"
-class DragModel() : ItemDrag {
-    override var itemOrientationDrag: Int = 0
-        get() = ItemOrientation.ALL // 只会返回该值
-}
-```
-
-## ItemOrientation
+## 拖拽方向
 
 该类包含拖拽可配置的方向
 
-|  字段  |    描述  |
+|  ItemOrientation  |    描述  |
 | ---- | ---- |
 |   `ALL`   |   全部方向   |
 |   `VERTICAL`   |   垂直方向   |
@@ -34,7 +26,7 @@ class DragModel() : ItemDrag {
 
 ## 自定义
 
-如果想要扩展ItemTouchHelper或监听可以给BindingAdapter的变量`itemTouchHelper`赋值
+`DefaultItemTouchCallback`是BRV内部的触摸事件处理, 可以复写或直接实现`ItemTouchHelper.Callback`
 
 ```kotlin
 rv.linear().setup {
@@ -57,4 +49,20 @@ rv.linear().setup {
 }.models = data
 ```
 
-> `DefaultItemTouchCallback`是BRV内部的触摸事件处理, 你可以覆写他或者直接`ItemTouchHelper.Callback`
+## 点击拖拽
+
+因为滑动列表和拖拽排序都是移动手势可能存在手势冲突, 所以建议点击列表某个区域或按钮开始拖拽
+
+```kotlin
+rv.linear().setup {
+    addType<DragModel>(R.layout.item_drag)
+    onCreate {
+        findView<View>(R.id.btnDrag).setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_DOWN) { // 如果手指按下则开始拖拽
+                itemTouchHelper?.startDrag(this)
+            }
+            true
+        }
+    }
+}.models = getData()
+```

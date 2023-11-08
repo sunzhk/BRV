@@ -1,3 +1,26 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2023 劉強東 https://github.com/liangjingkanji
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 package com.drake.brv.listener
 
 import androidx.recyclerview.widget.RecyclerView
@@ -37,8 +60,9 @@ interface ItemDifferCallback {
     /**
      * 当 [areItemsTheSame] 返回true, [areContentsTheSame] 返回false时, 调用该方法
      * 该方法将返回一个用于更新的数据对象
-     * @see [RecyclerView.Adapter.onBindViewHolder] 中的 payloads
-     * 默认实现返回null
+     * @return 如果返回null则item会有闪屏动画, 返回非null则不会. 该返回值会被[com.drake.brv.BindingAdapter.onPayload]接受. 默认实现返回null
+     * @see [RecyclerView.Adapter.onBindViewHolder]
+     * @see [RecyclerView.Adapter.notifyItemChanged]
      */
     fun getChangePayload(oldItem: Any, newItem: Any): Any? {
         return null

@@ -1,17 +1,25 @@
 /*
- * Copyright (C) 2018 Drake, Inc.
+ * MIT License
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Copyright (c) 2023 劉強東 https://github.com/liangjingkanji
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 @file:Suppress("PropertyName")
@@ -31,27 +39,24 @@ import androidx.annotation.IdRes
 import androidx.annotation.IntRange
 import androidx.annotation.LayoutRes
 import androidx.lifecycle.*
-import androidx.recyclerview.widget.DiffUtil
-import androidx.recyclerview.widget.ItemTouchHelper
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.*
+import androidx.recyclerview.widget.RecyclerView.NO_ID
+import androidx.viewbinding.ViewBinding
 import com.drake.brv.animation.*
 import com.drake.brv.annotaion.AnimationType
-import com.drake.brv.item.ItemBind
-import com.drake.brv.item.ItemExpand
-import com.drake.brv.item.ItemHover
-import com.drake.brv.item.ItemPosition
-import com.drake.brv.listener.DefaultItemTouchCallback
-import com.drake.brv.listener.ItemDifferCallback
-import com.drake.brv.listener.OnBindViewHolderListener
-import com.drake.brv.listener.OnHoverAttachListener
-import com.drake.brv.listener.ProxyDiffCallback
-import com.drake.brv.listener.throttleClick
+import com.drake.brv.item.*
+import com.drake.brv.listener.*
+import com.drake.brv.reflect.equalInstance
+import com.drake.brv.reflect.isInstance
 import com.drake.brv.utils.BRV
 import com.drake.brv.utils.takeIfIs
+import com.drake.brv.utils.setDifferModels
 import kotlinx.coroutines.*
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Modifier
 import kotlin.math.min
+import kotlin.reflect.KType
+import kotlin.reflect.typeOf
 
 /**
  * < Android上最强大的RecyclerView框架 >
@@ -68,9 +73,6 @@ import kotlin.math.min
  * 10. 下拉刷新/上拉加载/自动分页加载 [PageRefreshLayout]
  * 11. 强大的选择状态 [setChecked] (切换模式/多选/单选/全选/取消全选/反选/选中数据集/选中数量/单选和多选模式切换)
  * 12. 遵守高内聚低耦合原则, 支持功能配合使用, 代码简洁函数分组
- *
- * @property itemTouchHelper 等效于[RecyclerView.addItemDecoration]设置
- *
  */
 @Suppress("UNCHECKED_CAST", "MemberVisibilityCanBePrivate")
 open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolder>() {
@@ -83,42 +85,27 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
     
     var isScrolling = false
 
-    companion object {
-        private const val TAG: String = "BindingAdapter"
-        /**
-         * 即item的layout布局中的<variable>标签内定义变量名称
-         * 示例:
-         * ```
-         * <variable
-         *      name="m"
-         *      type="com.drake.brv.sample.mod.CheckModel" />
-         * ```
-         * 则应在Application中的onCreate函数内设置:
-         * `BindingAdapter.modelId = BR.m`
-         */
-        @Deprecated("函数优化", ReplaceWith("BRV.modelId", "com.drake.brv.utils.BRV"))
-        var modelId: Int = BRV.modelId
-    }
+    /**
+     * 单独配置modelId, 会忽略[BRV.modelId]
+     * @see BRV.modelId
+     */
+    var modelId: Int = BRV.modelId
+
+    companion object {}
 
 
     // <editor-fold desc="生命周期">
     private var onCreate: (BindingViewHolder.(viewType: Int) -> Unit)? = null
     private var onBind: (BindingViewHolder.() -> Unit)? = null
-    private var onPayload: (BindingViewHolder.(model: Any) -> Unit)? = null
+    private var onPayload: (BindingViewHolder.(payloads: MutableList<Any>) -> Unit)? = null
     private var onClick: (BindingViewHolder.(viewId: Int) -> Unit)? = null
     private var onLongClick: (BindingViewHolder.(viewId: Int) -> Unit)? = null
     private var onChecked: ((position: Int, checked: Boolean, allChecked: Boolean) -> Unit)? = null
-    private var onToggle: ((position: Int, toggleModel: Boolean, end: Boolean) -> Unit)? = null
+    private var onToggle: ((position: Int, toggleMode: Boolean, end: Boolean) -> Unit)? = null = null
     private var onDrag: ((startPosition: Int, endPosition: Int) -> Unit)? = null
     private var onMove: ((source: BindingAdapter.BindingViewHolder, target: BindingAdapter.BindingViewHolder) -> Unit)? = null
     private var onItemLongClick: (BindingAdapter.BindingViewHolder.() -> Unit)? = null
 
-    /**
-     * [onBindViewHolder]执行时回调
-     */
-    fun onBind(block: BindingViewHolder.() -> Unit) {
-        onBind = block
-    }
 
     /**
      * [onCreateViewHolder]执行时回调
@@ -128,10 +115,19 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
     }
 
     /**
-     * 增量更新回调, 和[onBind]等效
-     * @param block 参数model等同于[BindingViewHolder.getModel]
+     * [onBindViewHolder]执行时回调
      */
-    fun onPayload(block: BindingViewHolder.(model: Any) -> Unit) {
+    fun onBind(block: BindingViewHolder.() -> Unit) {
+        onBind = block
+    }
+
+    /**
+     * 增量更新回调
+     * 当你使用[notifyItemChanged(int, Object)]或者[notifyItemRangeChanged(int, Object)]等方法更新列表时才会触发, 并且形参payload要求不能为null
+     *
+     * @param block 多次调用[notifyItemChanged]会将payload合并到一个集合中payloads
+     */
+    fun onPayload(block: BindingViewHolder.(payloads: MutableList<Any>) -> Unit) {
         onPayload = block
     }
 
@@ -153,6 +149,10 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
         onItemLongClick = block
     }
 
+    override fun getItemId(position: Int): Long {
+        return getModelOrNull<ItemStableId>(position)?.getItemId() ?: NO_ID
+    }
+
     // </editor-fold>
 
 
@@ -161,14 +161,11 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
     private var context: Context? = null
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): BindingViewHolder {
-        val viewHolder = BindingViewHolder(parent.getView(viewType))
-        viewHolder.lifecycle
-        onCreate?.invoke(viewHolder, viewType)
-        return viewHolder
-    }
-
-    fun ViewGroup.getView(@LayoutRes layout: Int): View {
-        return LayoutInflater.from(context).inflate(layout, this, false)
+        val itemView = LayoutInflater.from(parent.context).inflate(viewType, parent, false)
+        val vh = BindingViewHolder(itemView)
+        RecyclerViewUtils.setItemViewType(vh, viewType)
+        onCreate?.invoke(vh, viewType)
+        return vh
     }
 
     override fun onBindViewHolder(holder: BindingViewHolder, position: Int) {
@@ -180,26 +177,22 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
         position: Int,
         payloads: MutableList<Any>,
     ) {
-        if (payloads.isNotEmpty()) {
-            onPayload?.invoke(holder, payloads[0])
+        if (onPayload != null && payloads.isNotEmpty()) {
+            onPayload?.invoke(holder, payloads)
         } else {
             super.onBindViewHolder(holder, position, payloads)
         }
     }
 
     override fun getItemViewType(position: Int): Int {
-
         val model = getModel<Any>(position)
-        val modelClass: Class<*> = model.javaClass
-        return (typePool[modelClass]?.invoke(model, position) ?: interfacePool?.run {
-            for (interfaceType in this) {
-                if (interfaceType.key.isAssignableFrom(modelClass)) {
-                    return@run interfaceType.value.invoke(model, position)
-                }
-            }
-            null
-        }
-        ?: throw NoSuchPropertyException("please add item model type : addType<${model.javaClass.name}>(R.layout.item)"))
+        return typePool.firstNotNullOfOrNull {
+            if (it.key.equalInstance(model)) it.value else null
+        }?.invoke(model, position)
+            ?: interfacePool.firstNotNullOfOrNull {
+                if (it.key.isInstance(model)) it.value else null
+            }?.invoke(model, position)
+            ?: throw NoSuchPropertyException("Please add item model type : addType<${model.javaClass.name}>(R.layout.item)")
     }
 
     override fun getItemCount() = headerCount + modelCount + footerCount
@@ -232,12 +225,18 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
     }
 
     override fun onViewAttachedToWindow(holder: BindingViewHolder) {
-        super.onViewAttachedToWindow(holder)
         val layoutPosition = holder.layoutPosition
-        if (animationEnabled && lastPosition < layoutPosition) {
-            itemAnimation.onItemEnterAnimation(holder.itemView)
-            lastPosition = layoutPosition
+        if (animationEnabled) {
+            if (animationRepeat || lastPosition < layoutPosition) {
+                itemAnimation.onItemEnterAnimation(holder.itemView)
+                lastPosition = layoutPosition
+            }
         }
+        holder.getModelOrNull<ItemAttached>()?.onViewAttachedToWindow(holder)
+    }
+
+    override fun onViewDetachedFromWindow(holder: BindingViewHolder) {
+        holder.getModelOrNull<ItemAttached>()?.onViewDetachedFromWindow(holder)
     }
 
     override fun onViewRecycled(holder: BindingViewHolder) {
@@ -253,31 +252,34 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
     // <editor-fold desc="多类型">
 
     /** 类型池 */
-    val typePool = mutableMapOf<Class<*>, Any.(Int) -> Int>()
-    var interfacePool: MutableMap<Class<*>, Any.(Int) -> Int>? = null
+    val typePool = mutableMapOf<KType, Any.(Int) -> Int>()
+    val interfacePool = mutableMapOf<KType, Any.(Int) -> Int>()
 
     /**
      * 添加多类型
-     * 在BRV中一个Item类型就是对应一个唯一的布局文件Id, 而[M]即为对应该类型所需的数据类型. 只要使用该函数添加的元素类型才被允许赋值给[models].
-     * 然后假设你使用DataBinding的话, 则该类型对应在[models]中的对象会被DataBinding绑定都对应的布局上. 前提是你有在xml中声明数据类型
+     * BRV中一个Item类型对应一个Class布局Id, 而[M]即为对应该类型所需的数据类型. 只有使用该方法添加的元素类型才被允许赋值给[models]
+     *
+     * 如果泛型为接口类型则自动等效于[addInterfaceType]
      */
     inline fun <reified M> addType(@LayoutRes layout: Int) {
         if (Modifier.isInterface(M::class.java.modifiers)) {
-            M::class.java.addInterfaceType { layout }
+            interfacePool[typeOf<M>()] = { layout }
         } else {
-            typePool[M::class.java] = { layout }
+            typePool[typeOf<M>()] = { layout }
         }
     }
 
     /**
      * 通过回调函数添加多类型, 一对多多类型(即一个数据类对应多个布局)
      * [block]中的position为当前item位于列表中的索引, [M]则为rv的models中对应的数据类型
+     *
+     * 如果泛型为接口类型则自动等效于[addInterfaceType]
      */
     inline fun <reified M> addType(noinline block: M.(position: Int) -> Int) {
         if (Modifier.isInterface(M::class.java.modifiers)) {
-            M::class.java.addInterfaceType(block as Any.(Int) -> Int)
+            interfacePool[typeOf<M>()] = block as Any.(Int) -> Int
         } else {
-            typePool[M::class.java] = block as Any.(Int) -> Int
+            typePool[typeOf<M>()] = block as Any.(Int) -> Int
         }
     }
 
@@ -286,25 +288,25 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
      * @receiver 接口类
      * @see addType
      */
-    fun Class<*>.addInterfaceType(block: Any.(Int) -> Int) {
-        (interfacePool ?: mutableMapOf<Class<*>, Any.(Int) -> Int>().also {
-            interfacePool = it
-        })[this] = block
+    inline fun <reified M> addInterfaceType(noinline block: Any.(Int) -> Int) {
+        interfacePool[typeOf<M>()] = block
     }
-    // </editor-fold>
 
+    // </editor-fold>
 
     // <editor-fold desc="触摸事件">
     private val clickListeners = HashMap<Int, Pair<(BindingViewHolder.(Int) -> Unit)?, Boolean>>()
     private val longClickListeners = HashMap<Int, (BindingViewHolder.(Int) -> Unit)?>()
 
-    /** 自定义ItemTouchHelper即可设置该属性 */
-    var itemTouchHelper: ItemTouchHelper? =
-        ItemTouchHelper(DefaultItemTouchCallback({ start, end ->
-            onDrag?.invoke(start, end)
-        }, { source, target ->
-            onMove?.invoke(source, target)
-        }))
+    /**
+     * 自定义ItemTouchHelper即可设置该属性
+     * 等效于[RecyclerView.addItemDecoration]设置
+     */
+    var itemTouchHelper: ItemTouchHelper? = ItemTouchHelper(DefaultItemTouchCallback({ start, end ->
+        onDrag?.invoke(start, end)
+    }, { source, target ->
+        onMove?.invoke(source, target)
+    }))
         set(value) {
             if (value == null) field?.attachToRecyclerView(null) else value.attachToRecyclerView(rv)
             field = value
@@ -312,60 +314,6 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
 
     /** 防抖动点击事件的间隔时间, 单位毫秒 */
     var clickThrottle: Long = BRV.clickThrottle
-
-    /** 防抖动点击事件的间隔时间, 单位毫秒. 本函数已废弃 */
-    @Deprecated("Rename to clickThrottle", ReplaceWith("clickThrottle"))
-    var clickPeriod: Long
-        get() = clickThrottle
-        set(value) {
-            clickThrottle = value
-        }
-
-    /**
-     * 添加点击事件
-     * 默认500ms防抖, 修改[clickThrottle]属性可以全局设置间隔时间, 单位毫秒
-     * 默认会回调最后一个onClick监听函数
-     */
-    @Deprecated(
-        "点击事件现在是指定Id对应一个回调函数, 相同Id覆盖",
-        ReplaceWith("onClick(*id){  }"),
-        DeprecationLevel.WARNING
-    )
-    fun addClickable(@IdRes vararg id: Int) {
-        for (i in id) {
-            clickListeners[i] = Pair(null, false)
-        }
-    }
-
-    /**
-     * 指定Id的视图将被监听点击事件(未使用防抖)
-     * 默认会回调最后一个onClick监听函数
-     */
-    @Deprecated(
-        "点击事件现在是指定Id对应一个回调函数, 相同Id覆盖",
-        ReplaceWith("onFastClick(*id){  }"),
-        DeprecationLevel.WARNING
-    )
-    fun addFastClickable(@IdRes vararg id: Int) {
-        for (i in id) {
-            clickListeners[i] = Pair(null, true)
-        }
-    }
-
-    /**
-     * 指定Id的视图将被监听长按事件
-     * 默认会回调最后一个onLongClick监听函数
-     */
-    @Deprecated(
-        "点击事件现在是指定Id对应一个回调函数, 相同Id覆盖",
-        ReplaceWith("onLongClick(*id){  }"),
-        DeprecationLevel.WARNING
-    )
-    fun addLongClickable(@IdRes vararg id: Int) {
-        for (i in id) {
-            longClickListeners[i] = null
-        }
-    }
 
     /**
      * 监听指定Id控件的点击事件, 包含防抖动
@@ -431,6 +379,11 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
     var animationEnabled = false
 
     /**
+     * 是否重复显示列表动画, 默认item只显示一次动画
+     **/
+    var animationRepeat = false
+
+    /**
      * 自定义条目的动画样式
      */
     fun setAnimation(itemAnimation: ItemAnimation) {
@@ -440,6 +393,9 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
 
     /**
      * 设置当前库自带的条目的动画样式
+     * @param animationType 内置动画样式
+     *
+     * @see setAnimation(ItemAnimation) 自定义动画配置
      */
     fun setAnimation(animationType: AnimationType) {
         this.animationEnabled = true
@@ -452,7 +408,6 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
         }
     }
 
-
     // </editor-fold>
 
     // <editor-fold desc="头布局">
@@ -460,7 +415,7 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
     /** 头布局的数据模型 */
     var headers: List<Any?> = mutableListOf()
         set(value) {
-            field = value.toMutableList()
+            field = if (value is ArrayList) value else value.toMutableList()
             notifyDataSetChanged()
         }
 
@@ -520,8 +475,7 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
     /**
      * 指定position是否为头布局
      */
-    fun isHeader(@IntRange(from = 0) position: Int): Boolean =
-        (headerCount > 0 && position < headerCount)
+    fun isHeader(@IntRange(from = 0) position: Int): Boolean = (headerCount > 0 && position < headerCount)
 
     // </editor-fold>
 
@@ -533,10 +487,8 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
      */
     var footers: List<Any?> = mutableListOf()
         set(value) {
-
-            field = value.toMutableList()
+            field = if (value is ArrayList) value else value.toMutableList()
             notifyDataSetChanged()
-
             if (isFirst) {
                 lastPosition = -1
                 isFirst = false
@@ -628,8 +580,7 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
     /**
      * 指定position是否为脚布局
      */
-    fun isFooter(@IntRange(from = 0) position: Int): Boolean =
-        (footerCount > 0 && position >= headerCount + modelCount && position < itemCount)
+    fun isFooter(@IntRange(from = 0) position: Int): Boolean = (footerCount > 0 && position >= headerCount + modelCount && position < itemCount)
 
     // </editor-fold>
 
@@ -642,10 +593,17 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
             return if (models == null) 0 else models!!.size
         }
 
-    /** 数据模型集合 */
-    var models: List<Any?>? = null
-        set(value) {
-            field = when (value) {
+    /** 原始的数据集合对象, 不会经过任何处理 */
+    var _data: MutableList<Any?>? = null
+
+    /**
+     * 数据模型集合
+     * 如果赋值的是[List]不可变集合将会自动复制为[MutableList], 将无法保持为同一个集合对象引用
+     */
+    var models: List<Any?>?
+        get() = _data
+        @SuppressLint("NotifyDataSetChanged") set(value) {
+            _data = when (value) {
                 is ArrayList -> flat(value)
                 is List -> flat(value.toMutableList())
                 else -> null
@@ -667,13 +625,20 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
      * 对比数据, 根据数据差异自动刷新列表
      * 数据对比默认使用`equals`函数对比, 你可以为数据手动实现equals函数来修改对比逻辑. 推荐定义数据为 data class, 因其会根据构造参数自动生成equals
      * 如果数据集合很大导致对比速度很慢, 建议在非主步线程中调用此函数, 效果等同于[androidx.recyclerview.widget.AsyncListDiffer]
+     *
+     * 对于数据是否匹配可能需要你自定义[itemDifferCallback], 因为默认使用数据模型的[equals]方法匹配, 具体请阅读[ItemDifferCallback.DEFAULT]
+     *
      * @param newModels 新的数据, 将覆盖旧的数据
-     * @param detectMoves 是否对比Item的移动
+     * @param detectMoves 是否对比Item的移动, true会导致列表当前位置发生移动
      * @param commitCallback 因为子线程调用[setDifferModels]刷新列表会不同步(刷新列表需要切换到主线程), 而[commitCallback]保证在刷新列表完成以后调用(运行在主线程)
      */
     fun setDifferModels(newModels: List<Any?>?, detectMoves: Boolean = true, commitCallback: Runnable? = null) {
-        val oldModels = models
-        models = newModels
+        val oldModels = _data
+        _data = when (newModels) {
+            is ArrayList -> flat(newModels)
+            is List -> flat(newModels.toMutableList())
+            else -> null
+        }
         val diffResult = DiffUtil.calculateDiff(ProxyDiffCallback(newModels, oldModels, itemDifferCallback), detectMoves)
         val mainLooper = Looper.getMainLooper()
         if (Looper.myLooper() != mainLooper) {
@@ -685,53 +650,77 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
             diffResult.dispatchUpdatesTo(this)
             commitCallback?.run()
         }
+        checkedPosition.clear()
+        if (isFirst) {
+            lastPosition = -1
+            isFirst = false
+        } else {
+            lastPosition = itemCount - 1
+        }
     }
 
-    /** 可增删的数据模型集合, 本质上就是返回可变的models. 假设未赋值给models则将抛出异常为[ClassCastException] */
-    var mutable
-        get() = models as ArrayList
+    /** 可增删的数据模型集合, 如果models为null则将为列表默认赋值为空集合*/
+    var mutable: MutableList<Any?>
+        get() {
+            if (_data == null) {
+                _data = mutableListOf()
+            }
+            return _data as ArrayList
+        }
         set(value) {
             models = value
         }
 
     /**
-     * 扁平化数据. 将折叠分组铺平展开创建列表
+     * 扁平化数据, 如果元素存在子列表[ItemExpand.getItemSublist], 会自动展开(将子列表添加到数据集合中)/折叠(将子列表从数据集合中删除)
+     * @param models 数据集合
+     * @param expand true展开或false折叠其子分组, null则什么都不做
+     * @param depth 扁平化深度层级 -1 表示全部
      */
     private fun flat(
-        list: MutableList<Any?>,
+        models: MutableList<Any?>,
         expand: Boolean? = null,
         @IntRange(from = -1) depth: Int = 0,
     ): MutableList<Any?> {
 
-        if (list.isEmpty()) return list
-        val arrayList = ArrayList(list)
-        list.clear()
+        if (models.isEmpty()) return models
+        val arrayList = ArrayList(models)
+        models.clear()
 
-        arrayList.forEachIndexed { index, item ->
-            list.add(item)
+        var itemSublist: List<Any?>? = null
+        var itemGroupPosition = 0
+
+        arrayList.forEach { item ->
+            if (itemSublist != null && models.any { item === it }) {
+                return@forEach
+            }
+            itemSublist = null
+            models.add(item)
             if (item is ItemExpand) {
-                item.itemGroupPosition = index
+                item.itemGroupPosition = itemGroupPosition
                 var nextDepth = depth
                 if (expand != null && depth != 0) {
                     item.itemExpand = expand
                     if (depth > 0) nextDepth -= 1
                 }
 
-                val itemSublist = item.itemSublist
-                if (!itemSublist.isNullOrEmpty() && (item.itemExpand || (depth != 0 && expand != null))) {
-                    val nestedList = flat(ArrayList(itemSublist), expand, nextDepth)
-                    list.addAll(nestedList)
+                itemSublist = item.getItemSublist()
+                itemSublist?.let {
+                    if (it.isNotEmpty() && (item.itemExpand || (depth != 0 && expand != null))) {
+                        val nestedList = flat(it.toMutableList(), expand, nextDepth)
+                        models.addAll(nestedList)
+                    }
                 }
             }
+            itemGroupPosition += 1
         }
-        return list
+        return models
     }
 
     /**
      * 指定position是否为models
      */
-    fun isModel(@IntRange(from = 0) position: Int): Boolean =
-        !(isHeader(position) || isFooter(position))
+    fun isModel(@IntRange(from = 0) position: Int): Boolean = !(isHeader(position) || isFooter(position))
 
     /**
      * 根据索引返回数据模型, 如果不存在该模型则返回Null
@@ -758,26 +747,57 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
 
     /**
      * 添加新的数据
+     * @param models 被添加的数据
+     * @param animation 是否使用动画
+     * @param index 插入到[models]指定位置, 如果index超过[models]长度则会添加到最后
      */
-    fun addModels(models: List<Any?>?, animation: Boolean = true) {
+    @SuppressLint("NotifyDataSetChanged")
+    fun addModels(
+        models: List<Any?>?, animation: Boolean = true, @IntRange(from = -1) index: Int = -1
+    ) {
         if (models.isNullOrEmpty()) return
         val data: MutableList<Any?> = when (models) {
             is ArrayList -> models
             else -> models.toMutableList()
         }
-        if (this.models.isNullOrEmpty()) {
-            this.models = flat(data)
-            notifyDataSetChanged()
-        } else {
-            val realModels = this.models as MutableList
-            realModels.addAll(flat(data))
-            if (animation) {
-                notifyItemRangeInserted(headerCount + modelCount - data.size, data.size)
-                rv?.post {
-                    rv?.invalidateItemDecorations()
-                }
-            } else {
+        when {
+            this.models == null -> {
+                this.models = flat(data)
                 notifyDataSetChanged()
+            }
+
+            this.models?.isEmpty() == true -> {
+                (this.models as? MutableList)?.let {
+                    it.addAll(flat(data))
+                    notifyDataSetChanged()
+                }
+            }
+
+            else -> {
+                val realModels = this.models as MutableList
+                var insertIndex: Int = headerCount
+                if (index == -1 || realModels.size < index) {
+                    insertIndex += realModels.size
+                    realModels.addAll(flat(data))
+                } else {
+                    if (checkedPosition.isNotEmpty()) {
+                        val insertSize = models.size
+                        val iterator = checkedPosition.listIterator()
+                        while (iterator.hasNext()) {
+                            iterator.set(iterator.next() + insertSize)
+                        }
+                    }
+                    insertIndex += index
+                    realModels.addAll(index, flat(data))
+                }
+                if (animation) {
+                    notifyItemRangeInserted(insertIndex, data.size)
+                    rv?.post {
+                        rv?.invalidateItemDecorations()
+                    }
+                } else {
+                    notifyDataSetChanged()
+                }
             }
         }
     }
@@ -828,9 +848,10 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
      * @param toggleMode 切换模式
      * @param end 全部条目已经切换完成
      */
-    fun onToggle(block: (position: Int, toggleModel: Boolean, end: Boolean) -> Unit) {
+    fun onToggle(block: (position: Int, toggleMode: Boolean, end: Boolean) -> Unit) {
         onToggle = block
     }
+
     //</editor-fold>
 
 
@@ -932,13 +953,11 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
      */
     fun setChecked(@IntRange(from = 0) position: Int, checked: Boolean) {
 
-        if ((checkedPosition.contains(position) && checked) ||
-            (!checked && !checkedPosition.contains(position))
-        ) return
+        if ((checkedPosition.contains(position) && checked) || (!checked && !checkedPosition.contains(position))) return
 
         val itemViewType = getItemViewType(position)
 
-        if (checkableItemTypeList != null && checkableItemTypeList!!.contains(itemViewType)) return
+        if (checkableItemTypeList?.contains(itemViewType) == false) return
 
         if (onChecked == null) return
 
@@ -974,7 +993,7 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
 
     //<editor-fold desc="分组">
 
-    private var previousExpandPosition = 0
+    private var previousExpandPosition = -1
     private var onExpand: (BindingViewHolder.(Boolean) -> Unit)? = null
 
     /** 分组展开和折叠是否启用动画 */
@@ -1000,9 +1019,7 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
         val bModel = models?.getOrNull(otherPosition) ?: return false
         for (index in min(position, otherPosition) - 1 downTo 0) {
             val item = models?.getOrNull(index) ?: break
-            if (item is ItemExpand && item.itemSublist?.contains(aModel) == true
-                && item.itemSublist?.contains(bModel) == true
-            ) {
+            if (item is ItemExpand && item.getItemSublist()?.contains(aModel) == true && item.getItemSublist()?.contains(bModel) == true) {
                 return true
             }
         }
@@ -1021,7 +1038,11 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
         scrollTop: Boolean = false,
         @IntRange(from = -1) depth: Int = 0,
     ): Int {
-        val holder = rv?.findViewHolderForLayoutPosition(position) as? BindingViewHolder ?: return 0
+        val holder = rv?.findViewHolderForLayoutPosition(position) as? BindingViewHolder ?: rv?.run {
+            val holder = createViewHolder(this, getItemViewType(position))
+            bindViewHolder(holder, position)
+            holder
+        } ?: return 0
         return holder.expand(scrollTop, depth)
     }
 
@@ -1032,7 +1053,11 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
      * @return 折叠后消失的条目数量
      */
     fun collapse(@IntRange(from = 0) position: Int, @IntRange(from = -1) depth: Int = 0): Int {
-        val holder = rv?.findViewHolderForLayoutPosition(position) as? BindingViewHolder ?: return 0
+        val holder = rv?.findViewHolderForLayoutPosition(position) as? BindingViewHolder ?: rv?.run {
+            val holder = createViewHolder(this, getItemViewType(position))
+            bindViewHolder(holder, position)
+            holder
+        } ?: return 0
         return holder.collapse(depth)
     }
 
@@ -1047,7 +1072,11 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
         scrollTop: Boolean = false,
         @IntRange(from = -1) depth: Int = 0,
     ): Int {
-        val holder = rv?.findViewHolderForLayoutPosition(position) as? BindingViewHolder ?: return 0
+        val holder = rv?.findViewHolderForLayoutPosition(position) as? BindingViewHolder ?: rv?.run {
+            val holder = createViewHolder(this, getItemViewType(position))
+            bindViewHolder(holder, position)
+            holder
+        } ?: return 0
         return holder.expandOrCollapse(scrollTop, depth)
     }
 
@@ -1055,9 +1084,13 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
 
     inner class BindingViewHolder : RecyclerView.ViewHolder, LifecycleOwner {
 
-        lateinit var _data: Any private set
         var context: Context = this@BindingAdapter.context!!
         val adapter: BindingAdapter = this@BindingAdapter
+
+        /** 对应[models]中索引的元素 */
+        lateinit var _data: Any private set
+
+        /** 对应[models]中的索引 */
         val modelPosition get() = layoutPosition - headerCount
         
         private var lifecycleRegistry = LifecycleRegistry(this)
@@ -1067,6 +1100,15 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
 
         val viewHolderLifecycle: Lifecycle
             get() = lifecycleRegistry
+
+        /**
+         * 该变量不会自动变更, 主要用于在[onCreate]和[onBind]中共享数据, 例如嵌套列表的[RecyclerView.Adapter]
+         * [_data]和该变量不同, 会在[onBind]时一直被替换为列表集合[models]中的元素
+         */
+        var tag: Any? = null
+
+        @PublishedApi
+        internal var viewBinding: ViewBinding? = null
 
         constructor(itemView: View) : super(itemView)
 
@@ -1138,29 +1180,50 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
             }
 
             onBind?.invoke(this@BindingViewHolder)
-//            try {
-//                viewDataBinding?.setVariable(modelId, model)
-//            } catch (e: Exception) {
-//                val message =
-//                    "${e.message} at file(${context.resources.getResourceEntryName(itemViewType)}.xml:0)"
-//                Exception(message).printStackTrace()
-//            }
-//            viewDataBinding?.executePendingBindings()
+
+            val viewBinding = viewBinding
         }
-        
+
         internal fun handleLifecycleEvent(event: Lifecycle.Event) {
             lifecycleRegistry.handleLifecycleEvent(event)
         }
-        
-//        /**
-//         * 返回匹配泛型的数据绑定对象ViewDataBinding
-//         */
-//        fun <B : ViewDataBinding> getBinding(): B = viewDataBinding as B
+
+        /**
+         * 返回匹配泛型的数据绑定对象[ViewBinding]
+         */
+        inline fun <reified B : ViewBinding> getBinding(): B {
+            return if (viewBinding == null) {
+                val method = B::class.java.getMethod("bind", View::class.java)
+                val viewBinding = method.invoke(null, itemView) as B
+                this.viewBinding = viewBinding
+                viewBinding
+            } else {
+                viewBinding as B
+            }
+        }
+
+        /**
+         * 返回匹配泛型的数据绑定对象[ViewBinding], 如果不匹配则返回null
+         */
+        inline fun <reified B : ViewBinding> getBindingOrNull(): B? {
+            return if (viewBinding == null) {
+                try {
+                    val method = B::class.java.getMethod("bind", View::class.java)
+                    val viewBinding = method.invoke(null, itemView) as? B
+                    this.viewBinding = viewBinding
+                    viewBinding
+                } catch (e: InvocationTargetException) {
+                    null
+                }
+            } else {
+                viewBinding as? B
+            }
+        }
 
         /**
          * 查找ItemView上的视图
          */
-        fun <V : View> findView(@IdRes id: Int): V = itemView.findViewById(id)
+        fun <V : View?> findView(@IdRes id: Int): V = itemView.findViewById(id)
 
         /**
          * 返回数据模型
@@ -1179,51 +1242,46 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
          * @param depth 递归展开子项的深度, 如等于-1则代表展开所有子项, 0表示仅展开当前
          * @return 展开后新增的条目数量
          */
-        fun expand(scrollTop: Boolean = true, @IntRange(from = -1) depth: Int = 0): Int {
-            val itemExpand = getModelOrNull<ItemExpand>()
+        fun expand(scrollTop: Boolean = false, @IntRange(from = -1) depth: Int = 0): Int {
+            val itemExpand = getModelOrNull<ItemExpand>() ?: return 0
+            if (itemExpand.itemExpand) return 0
 
-            val realPosition =
-                if (singleExpandMode && findParentPosition() != previousExpandPosition) {
-                    if (layoutPosition > previousExpandPosition) {
-                        layoutPosition - adapter.collapse(previousExpandPosition)
-                    } else {
-                        adapter.collapse(previousExpandPosition)
-                        layoutPosition
-                    }
-                } else layoutPosition
+            var position = if (bindingAdapterPosition == -1) layoutPosition else bindingAdapterPosition
+
+            if (singleExpandMode && previousExpandPosition != -1 && findParentPosition() != previousExpandPosition) {
+                val collapseCount = adapter.collapse(previousExpandPosition)
+                if (position > previousExpandPosition) {
+                    position -= collapseCount
+                }
+            }
 
             onExpand?.invoke(this, true)
 
-            return if (itemExpand != null && !itemExpand.itemExpand) {
-                val itemSublist = itemExpand.itemSublist
-                itemExpand.itemExpand = true
+            val itemSublist = itemExpand.getItemSublist()
+            itemExpand.itemExpand = true
+            previousExpandPosition = position
 
-                if (itemSublist.isNullOrEmpty()) {
-                    notifyItemChanged(realPosition)
-                    previousExpandPosition = realPosition
-                    0
+            return if (itemSublist.isNullOrEmpty()) {
+                notifyItemChanged(position)
+                0
+            } else {
+                val sublistFlat = flat(ArrayList(itemSublist), true, depth)
+
+                (this@BindingAdapter.models as MutableList).addAll(position + 1 - headerCount, sublistFlat)
+                if (expandAnimationEnabled) {
+                    notifyItemChanged(position)
+                    notifyItemRangeInserted(position + 1, sublistFlat.size)
                 } else {
-                    val sublistFlat = flat(ArrayList(itemSublist), true, depth)
-
-                    (this@BindingAdapter.models as MutableList).addAll(
-                        realPosition + 1,
-                        sublistFlat
-                    )
-                    if (expandAnimationEnabled) {
-                        notifyItemChanged(realPosition)
-                        notifyItemRangeInserted(realPosition + 1, sublistFlat.size)
-                    } else {
-                        notifyDataSetChanged()
-                    }
-                    if (scrollTop) {
-                        rv?.postDelayed({
-                            rv?.smoothScrollToPosition(realPosition)
-                        }, 200)
-                    }
-                    previousExpandPosition = realPosition
-                    sublistFlat.size
+                    notifyDataSetChanged()
                 }
-            } else 0
+                if (scrollTop) {
+                    rv?.let {
+                        it.scrollToPosition(position)
+                        (it.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(position, 0)
+                    }
+                }
+                sublistFlat.size
+            }
         }
 
         /**
@@ -1232,29 +1290,30 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
          * @return 折叠后减少的条目数量
          */
         fun collapse(@IntRange(from = -1) depth: Int = 0): Int {
-            val itemExpand = getModelOrNull<ItemExpand>()
+            val itemExpand = getModelOrNull<ItemExpand>() ?: return 0
+            if (!itemExpand.itemExpand) return 0
+
+            val position = if (bindingAdapterPosition == -1) layoutPosition else bindingAdapterPosition
 
             onExpand?.invoke(this, false)
 
-            return if (itemExpand != null && itemExpand.itemExpand) {
-                val itemSublist = itemExpand.itemSublist
-                itemExpand.itemExpand = false
+            val itemSublist = itemExpand.getItemSublist()
+            itemExpand.itemExpand = false
 
-                if (itemSublist.isNullOrEmpty()) {
-                    notifyItemChanged(layoutPosition, itemExpand)
-                    0
+            return if (itemSublist.isNullOrEmpty()) {
+                notifyItemChanged(position, itemExpand)
+                0
+            } else {
+                val sublistFlat = flat(ArrayList(itemSublist), false, depth)
+                (this@BindingAdapter.models as MutableList).subList(position + 1 - headerCount, position + 1 - headerCount + sublistFlat.size).clear()
+                if (expandAnimationEnabled) {
+                    notifyItemChanged(position, itemExpand)
+                    notifyItemRangeRemoved(position + 1, sublistFlat.size)
                 } else {
-                    val sublistFlat = flat(ArrayList(itemSublist), false, depth)
-                    (this@BindingAdapter.models as MutableList).removeAll(sublistFlat)
-                    if (expandAnimationEnabled) {
-                        notifyItemChanged(layoutPosition, itemExpand)
-                        notifyItemRangeRemoved(layoutPosition + 1, sublistFlat.size)
-                    } else {
-                        notifyDataSetChanged()
-                    }
-                    sublistFlat.size
+                    notifyDataSetChanged()
                 }
-            } else 0
+                sublistFlat.size
+            }
         }
 
         /**
@@ -1277,7 +1336,7 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
         fun findParentPosition(): Int {
             for (index in layoutPosition - 1 downTo 0) {
                 val item = models?.getOrNull(index) ?: break
-                if (item is ItemExpand && item.itemSublist?.contains(_data) == true) {
+                if (item is ItemExpand && item.getItemSublist()?.contains(_data) == true) {
                     return index
                 }
             }
@@ -1286,7 +1345,7 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
 
         /**
          * 查找分组中的父项ViewHolder
-         * @return null表示不存在父项
+         * @return null表示不存在父项或没有显示在屏幕中
          */
         fun findParentViewHolder(): BindingViewHolder? {
             return rv?.findViewHolderForLayoutPosition(findParentPosition()) as? BindingViewHolder
@@ -1314,5 +1373,6 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
         val model = getModelOrNull<ItemHover>(position)
         return model != null && model.itemHover && hoverEnabled
     }
+
     //</editor-fold>
 }

@@ -1,19 +1,3 @@
-/*
- * Copyright (C) 2018 Drake, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.drake.brv.sample.ui.fragment
 
 import android.widget.TextView
@@ -28,8 +12,10 @@ import com.drake.tooltip.toast
 class SimpleFragment : EngineFragment<FragmentSimpleBinding>(R.layout.fragment_simple) {
 
     override fun initView() {
+
+        // LayoutManager可以通过 linear/grid/staggered 等函数或者在layout布局中通过属性设置都行, 简单的建议在布局设置
         binding.rv.linear().setup {
-            addType<SimpleModel>(R.layout.item_simple)
+            addType<SimpleModel>(R.layout.item_simple_text)
             onBind {
                 findView<TextView>(R.id.tv_simple).text = getModel<SimpleModel>().name
             }

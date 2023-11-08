@@ -1,8 +1,4 @@
-支持`GridLayoutManager`的网格布局的分割线
-
-> 由于网格分割线是动态计算的, 所以在RecyclerView中假设你添加新的数据使用局部刷新函数(notifyItem*等函数)以后可能需要使用`rv.invalidateItemDecorations()`刷新分隔物, 否则可能会分割线宽高错乱
-
-## 水平分割线
+## 水平分隔线
 
 <img src="https://i.loli.net/2021/08/14/oyjdg42zDUbkFtu.png" width="250"/>
 
@@ -13,7 +9,7 @@ rv.grid(3).divider(R.drawable.divider_horizontal).setup {
 ```
 
 
-## 垂直分割线
+## 垂直分隔线
 
 <img src="https://i.loli.net/2021/08/14/ChG9ZnNiJyasWFr.png" width="250"/>
 
@@ -25,7 +21,7 @@ rv.grid(3, RecyclerView.HORIZONTAL)
 }.models = getData()
 ```
 
-## 网格分割线
+## 网格分隔线
 
 <img src="https://i.loli.net/2021/08/14/NLAPphzIU6yvVnt.png" width="250"/>
 
@@ -38,17 +34,17 @@ rv.grid(3).divider {
 }.models = getData()
 ```
 
-## 边缘分割线
+## 边缘分隔线
 
-通过两个字段可以控制边缘分割线是否显示
+通过两个字段可以控制边缘分隔线是否显示
 
 | 字段 | 描述 |
 |-|-|
-| [startVisible](api/-b-r-v/com.drake.brv/-default-decoration/index.html#-2091559976%2FProperties%2F-900954490) | 是否显示上下边缘分割线 |
-| [endVisible](api/-b-r-v/com.drake.brv/-default-decoration/index.html#-377591023%2FProperties%2F-900954490) | 是否显示左右边缘分割线 |
-| [includeVisible](api/-b-r-v/com.drake.brv/-default-decoration/index.html#1716094302%2FProperties%2F-900954490) | 是否显示周围分割线 |
+| [startVisible](api/-b-r-v/com.drake.brv/-default-decoration/index.html#-2091559976%2FProperties%2F-900954490) | 是否显示上下边缘分隔线 |
+| [endVisible](api/-b-r-v/com.drake.brv/-default-decoration/index.html#-377591023%2FProperties%2F-900954490) | 是否显示左右边缘分隔线 |
+| [includeVisible](api/-b-r-v/com.drake.brv/-default-decoration/index.html#1716094302%2FProperties%2F-900954490) | 是否显示周围分隔线 |
 
-### 1) 上下
+### 上下
 
 <img src="https://i.loli.net/2021/08/14/JBjETuMoaORFWHK.png" width="250"/>
 
@@ -63,7 +59,7 @@ rv.grid(3).divider {
 ```
 
 
-### 2) 左右
+### 左右
 
 <img src="https://i.loli.net/2021/08/14/IcxHsWafFQXh4Eg.png" width="250"/>
 
@@ -77,7 +73,7 @@ rv.grid(3).divider {
 }.models = getData()
 ```
 
-### 3) 四周
+### 四周
 
 <img src="https://i.loli.net/2021/08/14/UmhH5BgFA3a1W2Q.png" width="250"/>
 
@@ -92,29 +88,65 @@ rv.grid(3).divider {
 }.models = getData()
 ```
 
+## 分隔线间隔
+
+分隔线默认情况下是基于rv设置间隔
+
+<img src="https://cdn.jsdelivr.net/gh/JBFiveHub/picture-storage@master/uPic/Clipboard - 2023-01-17 16.16.01.jpg" width="250"/>
+
+```kotlin
+binding.rv.grid(3, orientation = RecyclerView.VERTICAL).divider {
+    orientation = DividerOrientation.GRID
+    setDivider(1, true)
+    setMargin(16, 16, dp = true)
+    setColor(Color.WHITE)
+}.setup {
+    addType<DividerModel>(R.layout.item_divider_vertical)
+}.models = getData()
+```
+
+<br>
+使用`baseItemStart/baseItemEnd`参数以item为基准设置间隔
+
+<img src="https://cdn.jsdelivr.net/gh/JBFiveHub/picture-storage@master/uPic/Clipboard - 2023-01-17 16.30.04.jpg" width="250"/>
+
+<img src="https://cdn.jsdelivr.net/gh/JBFiveHub/picture-storage@master/uPic/Clipboard - 2023-01-17 16.33.04.jpg" width="250"/>
+
+```kotlin
+binding.rv.grid(3, orientation = RecyclerView.VERTICAL).divider {
+    orientation = DividerOrientation.GRID
+    setDivider(1, true)
+    setMargin(16, 16, dp = true, baseItemStart = true)
+    setColor(Color.WHITE)
+}.setup {
+    addType<DividerModel>(R.layout.item_divider_vertical)
+}.models = getData()
+```
+
+
 ## 网格悬停均布间隔
 
-这里建议使用嵌套列表完成, 避免分割线出现问题. 这种需求比较常见所以演示实现思路
+建议使用嵌套列表完成, 避免分隔线出现问题
 
 <img src="https://i.loli.net/2021/08/14/kCS4Kr9qpIfsveQ.gif" width="250"/>
 
 ```kotlin
 binding.rv.linear().setup {
     onCreate {
-        if (it == R.layout.item_simple_list) { // 构建嵌套网格列表
+        if (itemViewType == R.layout.item_simple_list) { // 构建嵌套网格列表
             findView<RecyclerView>(R.id.rv).divider { // 构建间距
                 setDivider(20)
                 includeVisible = true
                 orientation = DividerOrientation.GRID
             }.grid(2).setup {
-                addType<Model>(R.layout.item_multi_type_simple_none_margin)
+                addType<Model>(R.layout.item_group_none_margin)
             }
         }
     }
     onBind {
         if (itemViewType == R.layout.item_simple_list) { // 为嵌套的网格列表赋值数据
             findView<RecyclerView>(R.id.rv).models =
-                getModel<NestedGroupModel>().itemSublist
+                getModel<NestedGroupModel>().getItemSublist()
         }
     }
     addType<NestedGroupModel>(R.layout.item_simple_list)

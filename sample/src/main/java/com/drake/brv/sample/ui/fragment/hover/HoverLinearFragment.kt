@@ -1,19 +1,3 @@
-/*
- * Copyright (C) 2018 Drake, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.drake.brv.sample.ui.fragment.hover
 
 import android.view.View
@@ -22,7 +6,7 @@ import com.drake.brv.listener.OnHoverAttachListener
 import com.drake.brv.sample.R
 import com.drake.brv.sample.databinding.FragmentHoverBinding
 import com.drake.brv.sample.model.HoverHeaderModel
-import com.drake.brv.sample.model.Model
+import com.drake.brv.sample.model.SimpleModel
 import com.drake.brv.utils.linear
 import com.drake.brv.utils.setup
 import com.drake.tooltip.toast
@@ -32,7 +16,7 @@ class HoverLinearFragment : BaseHoverFragment<FragmentHoverBinding>(R.layout.fra
 
     override fun initView() {
         binding.rv.linear().setup {
-            addType<Model>(R.layout.item_multi_type_simple)
+            addType<SimpleModel>(R.layout.item_simple)
             addType<HoverHeaderModel>(R.layout.item_hover_header)
             models = getData()
 
@@ -61,25 +45,25 @@ class HoverLinearFragment : BaseHoverFragment<FragmentHoverBinding>(R.layout.fra
     private fun getData(): List<Any> {
         return listOf(
             HoverHeaderModel(),
-            Model(),
-            Model(),
-            Model(),
+            SimpleModel(),
+            SimpleModel(),
+            SimpleModel(),
             HoverHeaderModel(),
-            Model(),
-            Model(),
-            Model(),
+            SimpleModel(),
+            SimpleModel(),
+            SimpleModel(),
             HoverHeaderModel(),
-            Model(),
-            Model(),
-            Model(),
-            Model(),
-            Model(),
-            Model(),
-            Model(),
-            Model(),
-            Model(),
-            Model(),
-            Model()
+            SimpleModel(),
+            SimpleModel(),
+            SimpleModel(),
+            SimpleModel(),
+            SimpleModel(),
+            SimpleModel(),
+            SimpleModel(),
+            SimpleModel(),
+            SimpleModel(),
+            SimpleModel(),
+            SimpleModel()
         )
     }
 

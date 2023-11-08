@@ -1,32 +1,32 @@
-
-本框架在不影响RecyclerView的任何函数组件使用基础上开发. 本框架也将一直保持维护状态
+BRV为快速构建RV列表工具, 以开源分享来完善, 将一直保持社区维护
 
 <br>
-<p align="center"><strong>非常欢迎共同贡献代码/修订文档, 点击文档右上角小铅笔可直接修订文档 ↗</strong></p>
+<p align="center"><strong>STAR/分享可以让更多人参与到本开源项目</strong></p>
 <br>
+
+!!! note "前言"
+    1. 阅读文档, 快速了解
+    2. 阅读示例, 快速运用
+    3. 阅读源码, 熟练并拓展
 
 ## 创建一个简单的列表
 
 ```kotlin
-rv_simple.linear().setup {
+rv.linear().setup {
     addType<SimpleModel>(R.layout.item_simple)
 }.models = getData()
 ```
+文档提及的`rv`为RecyclerView简称, Model即`数据类/bean/pojo`
 
-这里出现的`BRV`关键词即本框架, `RV`即RecyclerView简称
+<br>
+BRV支持以下4种数据绑定方式, 根据使用场景选择
 
-## 列表填充数据的三种方式
-
-BRV支持三种方式, 灵活使用; 这里提及的Model就等同于数据类/JavaBean/POJO
-
-
-
-### 1) 函数回调
+## 函数回调
 
 在`onBind`函数中填充数据
 
 ```kotlin
-rv_simple.linear().setup {
+rv.linear().setup {
     addType<SimpleModel>(R.layout.item_simple)
     onBind {
         findView<TextView>(R.id.tv_simple).text = getModel<SimpleModel>().name
@@ -38,32 +38,50 @@ rv_simple.linear().setup {
 
 
 
-### 2) 实现接口
+## 实现接口
 
-通过为Model实现接口`ItemBind`, 实现函数`onBind`, 在该函数中填充数据; 这种方式在很多框架中被应用, 例如BRVAH, 但是我不推荐这种视图在Model中绑定的方式, 因为Model应当只存储数据和计算逻辑, 不应包含任何UI
+为Model实现接口`ItemBind`, 然后在`onBind`中进行赋值数据
+
+!!! warning "耦合"
+    不推荐, 这会导致业务逻辑和视图耦合, 不方便应用迭代 <br>
+    但这种方式在很多框架中被使用, 例如`BRVAH`, 可以方便从其他框架迁移到BRV
 
 ```kotlin
 class SimpleModel(var name: String = "BRV") : ItemBind {
 
     override fun onBind(holder: BindingAdapter.BindingViewHolder) {
-        val appName = holder.context.getString(R.string.app_name)
-        holder.findView<TextView>(R.id.tv_simple).text = appName + itemPosition
+        holder.findView<TextView>(R.id.tv_simple).text = holder.layoutPosition.toString()
     }
 }
 ```
 
+## ViewBinding
+要求开启ViewBinding, 上面实现接口方式也可以使用`getBinding()`
+```kotlin
+rv.linear().setup {
+    addType<SimpleModel>(R.layout.item_simple)
+    onBind {
+        val binding = getBinding<ItemSimpleBinding>() // ViewBinding/DataBinding都支持
+        val data = holder.getModel<SimpleModel>()
+    }
+}.models = getData()
+```
 
 
 
+## DataBinding
 
-### 3) DataBinding
+通过DataBinding数据绑定可以自动填充数据
 
-通过DataBinding数据绑定形式自动填充数据, 推荐, 这是代码量最少最灵活的一种方式.
+!!! success "推荐"
+    这是最简洁优雅/最安全的一种绑定数据方式
 
-第一步, 启用DataBinding, 在module中的build.gradle文件中
+### 1. 启用DataBinding
+
+首先在module中的`build.gradle`中开启DataBinding
 
 ```groovy
-apply plugin: "kotlin-kapt" // kapt插件用于生成dataBinding
+apply plugin: "kotlin-kapt" // 必要
 
 android {
 	/.../
@@ -71,7 +89,9 @@ android {
 }
 ```
 
-第二步, 在Item的布局文件中创建变量, 然后绑定变量到视图控件上
+### 2. 布局声明变量
+
+第二步, 在Item的布局文件中声明变量, 然后绑定变量到视图控件上
 
 ```xml hl_lines="24"
 <layout xmlns:android="http://schemas.android.com/apk/res/android">
@@ -83,72 +103,49 @@ android {
             type="com.drake.brv.sample.model.SimpleModel" />
     </data>
 
-    <LinearLayout
+    <TextView
+        android:id="@+id/tv_simple"
+        android:text="@{String.valueOf(m.name)}"
+        android:gravity="center"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content">
-
-        <FrameLayout
-            android:id="@+id/item"
-            android:layout_width="match_parent"
-            android:layout_height="100dp"
-            android:layout_margin="16dp"
-            android:background="@drawable/bg_card"
-            android:foreground="?selectableItemBackgroundBorderless">
-
-            <TextView
-				android:id="@+id/tv_simple"
-                android:text="@{String.valueOf(m.name)}"
-                android:gravity="center"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent" />
-
-        </FrameLayout>
-
-    </LinearLayout>
+        android:layout_height="100dp" />
 </layout>
 ```
 选中行是DataBinding使用方法
 
-第三步, 赋值一个用于`自定绑定数据到XML布局的Id`(DataBinding基础知识)
 
-> rv是一个列表. 里面的models是一个list集合, 每个元素对应一个item. dataBinding会根据你`赋值的Id`自动绑定models中元素到xml中赋值 <br>
-<br>
+### 3. 自动绑定
 
-1. 注意要先在某个布局或Item布局声明`<layout>`布局中的变量`name="m"`, `BR.m`才能被生成 <br>
-   <img src="https://i.loli.net/2021/08/14/rgX12ZSwkVMqQG3.png" width="450"/>
-1. 导包注意导入你所在module的BR, 这样所有使用该Id来声明数据模型的布局都会被BRV自动绑定数据 <br>
-   <img src="https://i.loli.net/2021/08/14/VhYlAp1J7ZR9rIs.png" width="350"/>
-   <img src="https://i.loli.net/2021/08/14/Yh5Ge1qQIObJpDn.png" width="350"/>
-1. 如果依然没有生成请`make project`(即图中绿色小锤子图标) <br>
-   <img src="https://i.loli.net/2021/08/14/IEh3H8VaFM6d1LR.png" width="150"/>
-
-> m(m是model的简称)可以是任何其他的名称, model或者sb都可以, 比如你`name="data"`, 那么你就应该使用BR.data <br>
-> BR.data和Android中常见的`R.id.data`都属于Id常量, 本质上都是Int值. 你可以点击查看BR.m源码<br>
-> 但是一旦声明`BRV.model = BR.m`你的所有BRV使用的item布局都得使用`name="m"`来声明数据模型, 否则会无法自动绑定 <br>
-> 当然你也可以在`onBind`里面手动绑定, 但是肯定比自动麻烦, 而且名称本身只是代号我建议都使用m <br>
-
+在Application中初始化, DataBinding会根据`modelId`自动绑定`models`到xml中
 ```kotlin
-class App : Application() {
-
-    override fun onCreate() {
-        super.onCreate()
-
-        // 初始化BindingAdapter的默认绑定ID, 如果不使用DataBinding并不需要初始化
-        BRV.modelId = BR.m
-    }
-}
+BRV.modelId = BR.m
 ```
 
-这种方式创建列表无需处理数据
+1. 先在某个布局中声明`<layout>`布局中的变量`m`(推荐命名), `BR.m`才能被生成 <br>一旦声明`BRV.model = BR.m`所有BRV使用的item布局使用`name="m"`来声明才能自动绑定
+   <img src="https://i.loli.net/2021/08/14/rgX12ZSwkVMqQG3.png" width="450"/>
+1. 导入主Module的BR, 这样所有使用该Id来声明数据模型的布局都会被BRV自动绑定数据 <br>
+   <img src="https://i.loli.net/2021/08/14/VhYlAp1J7ZR9rIs.png" width="350"/>
+   <img src="https://i.loli.net/2021/08/14/Yh5Ge1qQIObJpDn.png" width="350"/>
+1. 如没有生成可`Make Project`(小锤子) <br>
+   <img src="https://i.loli.net/2021/08/14/IEh3H8VaFM6d1LR.png" width="150"/>
+
+### 4. 构建列表
 
 ```kotlin
-rv_simple.linear().setup {
+rv.linear().setup {
     addType<SimpleModel>(R.layout.item_simple)
 }.models = getData()
 ```
 
-别看文档中第三种方式复杂, 实际第三种方式代码量最少, 同时最解耦
+!!! warning "组件化项目"
+    多Module组件化项目要求主Module及使用DataBinding的Module都开启DataBinding及Kapt,
+    否则抛出NoClassDefFoundError找不到BR类
 
-> 使用DataBinding可以复制或者引用我的常用自定义属性:  [DataBindingComponent.kt](https://github.com/liangjingkanji/Engine/blob/master/engine/src/main/java/com/drake/engine/databinding/DataBindingComponent.kt)<br>
-> 如果你想更加了解DataBinding请阅读[DataBinding最全使用说明](https://juejin.cn/post/6844903549223059463/)
+!!! quote "DataBinding"
+    使用DataBinding可以复制或者引用我的常用自定义属性:  [DataBindingComponent.kt](https://github.com/liangjingkanji/Engine/blob/master/engine/src/main/java/com/drake/engine/databinding/DataBindingComponent.kt) <br>
+    如果想更了解DataBinding可以阅读一篇文章: [DataBinding最全使用说明](https://juejin.cn/post/6844903549223059463/)
 
+---
+[下载Apk](https://github.com/liangjingkanji/BRV/releases/latest/download/brv-sample.apk){ .md-button }
+[下载源码](https://github.com/liangjingkanji/BRV.git){ .md-button }
+[示例代码](https://github1s.com/liangjingkanji/BRV/blob/HEAD/sample/src/main/java/com/drake/brv/sample/ui/fragment/SimpleFragment.kt){ .md-button }

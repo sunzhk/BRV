@@ -1,33 +1,41 @@
 /*
- * Copyright (C) 2018 Drake, Inc.
+ * MIT License
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Copyright (c) 2023 劉強東 https://github.com/liangjingkanji
  *
- * http://www.apache.org/licenses/LICENSE-2.0
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 package com.drake.brv.utils
 
-import android.app.Dialog
-import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import androidx.annotation.DrawableRes
-import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.annotation.IntRange
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.RecyclerView.VERTICAL
 import com.drake.brv.BindingAdapter
+import com.drake.brv.BindingAdapter.Companion.equals
 import com.drake.brv.DefaultDecoration
 import com.drake.brv.annotaion.DividerOrientation
 import com.drake.brv.layoutmanager.HoverGridLayoutManager
 import com.drake.brv.layoutmanager.HoverLinearLayoutManager
 import com.drake.brv.layoutmanager.HoverStaggeredGridLayoutManager
+import com.drake.brv.listener.ItemDifferCallback
 
 //<editor-fold desc="数据集">
 /**
@@ -36,13 +44,14 @@ import com.drake.brv.layoutmanager.HoverStaggeredGridLayoutManager
  */
 val RecyclerView.bindingAdapter
     get() = adapter as? BindingAdapter
-        ?: throw NullPointerException("RecyclerView has no BindingAdapter")
+        ?: throw NullPointerException("RecyclerView without BindingAdapter")
 
 val RecyclerView.safeBindingAdapter
     get() = adapter as? BindingAdapter
 
 /**
  * 数据模型集合
+ * 如果赋值的是[List]不可变集合将会自动被替换成[MutableList], 将无法保持为同一个集合对象引用
  */
 var RecyclerView.models
     get() = bindingAdapter.models
@@ -62,23 +71,35 @@ var RecyclerView.mutable
 //</editor-fold>
 
 /**
- * 添加数据
+ * 添加新的数据
  * @param models 被添加的数据
- * @param animation 添加数据是否显示动画
+ * @param animation 是否使用动画
+ * @param index 插入到[models]指定位置, 如果index超过[models]长度则会添加到最后
  */
-fun RecyclerView.addModels(models: List<Any?>?, animation: Boolean = true) {
-    bindingAdapter.addModels(models, animation)
+fun RecyclerView.addModels(
+    models: List<Any?>?,
+    animation: Boolean = true,
+    @IntRange(from = -1) index: Int = -1
+) {
+    bindingAdapter.addModels(models, animation, index)
 }
 
 /**
  * 对比数据, 根据数据差异自动刷新列表
  * 数据对比默认使用`equals`函数对比, 你可以为数据手动实现equals函数来修改对比逻辑. 推荐定义数据为 data class, 因其会根据构造参数自动生成equals
  * 如果数据集合很大导致对比速度很慢, 建议在非主步线程中调用此函数, 效果等同于[androidx.recyclerview.widget.AsyncListDiffer]
+ *
+ * 对于数据是否匹配可能需要你自定义[BindingAdapter.itemDifferCallback], 因为默认使用数据模型的[equals]方法匹配, 具体请阅读[ItemDifferCallback.DEFAULT]
+ *
  * @param newModels 新的数据, 将覆盖旧的数据
- * @param detectMoves 是否对比Item的移动
+ * @param detectMoves 是否对比Item的移动, true会导致列表当前位置发生移动
  * @param commitCallback 因为子线程调用[setDifferModels]刷新列表会不同步(刷新列表需要切换到主线程), 而[commitCallback]保证在刷新列表完成以后调用(运行在主线程)
  */
-fun RecyclerView.setDifferModels(newModels: List<Any?>?, detectMoves: Boolean = true, commitCallback: Runnable? = null) {
+fun RecyclerView.setDifferModels(
+    newModels: List<Any?>?,
+    detectMoves: Boolean = true,
+    commitCallback: Runnable? = null
+) {
     bindingAdapter.setDifferModels(newModels, detectMoves, commitCallback)
 }
 
@@ -184,23 +205,19 @@ fun RecyclerView.divider(
         this.orientation = orientation
     }
 }
-//</editor-fold>
 
-
-//<editor-fold desc="对话框">
 /**
- *  快速为对话框创建一个列表
+ * 设置空白间距分割
+ * @param space item的空白间距
+ * @param orientation 分割线方向, 仅[androidx.recyclerview.widget.GridLayoutManager]需要使用此参数, 其他LayoutManager都是根据其方向自动推断
  */
-fun Dialog.setup(block: BindingAdapter.(RecyclerView) -> Unit): Dialog {
-    val context = context
-    val recyclerView = RecyclerView(context)
-    recyclerView.setup(block)
-    recyclerView.layoutManager = LinearLayoutManager(context)
-    recyclerView.layoutParams = RecyclerView.LayoutParams(MATCH_PARENT, MATCH_PARENT)
-    setContentView(recyclerView)
-    return this
+fun RecyclerView.dividerSpace(
+    space: Int,
+    orientation: DividerOrientation = DividerOrientation.HORIZONTAL,
+): RecyclerView {
+    return divider {
+        setDivider(space)
+        this.orientation = orientation
+    }
 }
 //</editor-fold>
-
-
-

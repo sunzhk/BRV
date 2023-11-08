@@ -1,19 +1,27 @@
-/*
- * Copyright (C) 2018 Drake, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 
+/*
+ * MIT License
+ *
+ * Copyright (c) 2023 劉強東 https://github.com/liangjingkanji
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 package com.drake.brv.layoutmanager;
 
 import android.content.Context;
@@ -22,6 +30,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 
 import androidx.annotation.NonNull;
@@ -62,6 +71,9 @@ public class HoverLinearLayoutManager extends LinearLayoutManager {
     private int mPendingScrollPosition = RecyclerView.NO_POSITION;
     private int mPendingScrollOffset = 0;
     private boolean scrollEnabled = true;
+
+    // Attach count, to ensure the sticky header is only attached and detached when expected.
+    private int hoverAttachCount = 0;
 
     private Map<Integer, Integer> heightMap = new HashMap<>();
 
@@ -120,6 +132,10 @@ public class HoverLinearLayoutManager extends LinearLayoutManager {
      */
     public boolean isHover(View view) {
         return view == mHover;
+    }
+
+    public boolean hasHover() {
+        return mHover != null;
     }
 
     @Override
@@ -338,6 +354,38 @@ public class HoverLinearLayoutManager extends LinearLayoutManager {
     }
 
     @Override
+    public int findFirstVisibleItemPosition() {
+        detachHover();
+        int position = super.findFirstVisibleItemPosition();
+        attachHover();
+        return position;
+    }
+
+    @Override
+    public int findFirstCompletelyVisibleItemPosition() {
+        detachHover();
+        int position = super.findFirstCompletelyVisibleItemPosition();
+        attachHover();
+        return position;
+    }
+
+    @Override
+    public int findLastVisibleItemPosition() {
+        detachHover();
+        int position = super.findLastVisibleItemPosition();
+        attachHover();
+        return position;
+    }
+
+    @Override
+    public int findLastCompletelyVisibleItemPosition() {
+        detachHover();
+        int position = super.findLastCompletelyVisibleItemPosition();
+        attachHover();
+        return position;
+    }
+
+    @Override
     public View onFocusSearchFailed(View focused, int focusDirection, RecyclerView.Recycler recycler,
                                     RecyclerView.State state) {
         detachHover();
@@ -347,13 +395,13 @@ public class HoverLinearLayoutManager extends LinearLayoutManager {
     }
 
     private void detachHover() {
-        if (mHover != null) {
+        if (--hoverAttachCount == 0 && mHover != null) {
             detachView(mHover);
         }
     }
 
     private void attachHover() {
-        if (mHover != null) {
+        if (++hoverAttachCount == 1 && mHover != null) {
             attachView(mHover);
         }
     }
@@ -450,6 +498,7 @@ public class HoverLinearLayoutManager extends LinearLayoutManager {
 
         mHover = hoverHeader;
         mHoverPosition = position;
+        hoverAttachCount = 1;
     }
 
     /**
@@ -574,9 +623,17 @@ public class HoverLinearLayoutManager extends LinearLayoutManager {
             }
             if (nextHeaderView != null) {
                 if (getReverseLayout()) {
-                    y = Math.max(nextHeaderView.getBottom(), y);
+                    int bottomMargin = 0;
+                    if (nextHeaderView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+                        bottomMargin = ((ViewGroup.MarginLayoutParams) nextHeaderView.getLayoutParams()).bottomMargin;
+                    }
+                    y = Math.max(nextHeaderView.getBottom() + bottomMargin, y);
                 } else {
-                    y = Math.min(nextHeaderView.getTop() - headerView.getHeight(), y);
+                    int topMargin = 0;
+                    if (nextHeaderView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+                        topMargin = ((ViewGroup.MarginLayoutParams) nextHeaderView.getLayoutParams()).topMargin;
+                    }
+                    y = Math.min(nextHeaderView.getTop() - topMargin - headerView.getHeight(), y);
                 }
             }
             return y;
@@ -597,9 +654,17 @@ public class HoverLinearLayoutManager extends LinearLayoutManager {
             }
             if (nextHeaderView != null) {
                 if (getReverseLayout()) {
-                    x = Math.max(nextHeaderView.getRight(), x);
+                    int rightMargin = 0;
+                    if (nextHeaderView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+                        rightMargin = ((ViewGroup.MarginLayoutParams) nextHeaderView.getLayoutParams()).rightMargin;
+                    }
+                    x = Math.max(nextHeaderView.getRight() + rightMargin, x);
                 } else {
-                    x = Math.min(nextHeaderView.getLeft() - headerView.getWidth(), x);
+                    int leftMargin = 0;
+                    if (nextHeaderView.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+                        leftMargin = ((ViewGroup.MarginLayoutParams) nextHeaderView.getLayoutParams()).leftMargin;
+                    }
+                    x = Math.min(nextHeaderView.getLeft() - leftMargin - headerView.getWidth(), x);
                 }
             }
             return x;
@@ -744,34 +809,29 @@ public class HoverLinearLayoutManager extends LinearLayoutManager {
         @Override
         public void onItemRangeMoved(int fromPosition, int toPosition, int itemCount) {
             // Shift moved headers by toPosition - fromPosition.
-            // Shift headers in-between by -itemCount (reverse if upwards).
+            // Shift headers in-between by itemCount (reverse if downwards).
             int headerCount = mHeaderPositions.size();
             if (headerCount > 0) {
-                if (fromPosition < toPosition) {
-                    for (int i = findHeaderIndexOrNext(fromPosition); i != -1 && i < headerCount; i++) {
-                        int headerPos = mHeaderPositions.get(i);
-                        if (headerPos >= fromPosition && headerPos < fromPosition + itemCount) {
-                            mHeaderPositions.set(i, headerPos - (toPosition - fromPosition));
-                            sortHeaderAtIndex(i);
-                        } else if (headerPos >= fromPosition + itemCount && headerPos <= toPosition) {
-                            mHeaderPositions.set(i, headerPos - itemCount);
-                            sortHeaderAtIndex(i);
-                        } else {
-                            break;
-                        }
+                int topPosition = Math.min(fromPosition, toPosition);
+                for (int i = findHeaderIndexOrNext(topPosition); i != -1 && i < headerCount; i++) {
+                    int headerPos = mHeaderPositions.get(i);
+                    int newHeaderPos = headerPos;
+                    if (headerPos >= fromPosition && headerPos < fromPosition + itemCount) {
+                        newHeaderPos += toPosition - fromPosition;
+                    } else if (fromPosition < toPosition
+                            && headerPos >= fromPosition + itemCount && headerPos <= toPosition) {
+                        newHeaderPos -= itemCount;
+                    } else if (fromPosition > toPosition
+                            && headerPos >= toPosition && headerPos <= fromPosition) {
+                        newHeaderPos += itemCount;
+                    } else {
+                        break;
                     }
-                } else {
-                    for (int i = findHeaderIndexOrNext(toPosition); i != -1 && i < headerCount; i++) {
-                        int headerPos = mHeaderPositions.get(i);
-                        if (headerPos >= fromPosition && headerPos < fromPosition + itemCount) {
-                            mHeaderPositions.set(i, headerPos + (toPosition - fromPosition));
-                            sortHeaderAtIndex(i);
-                        } else if (headerPos >= toPosition && headerPos <= fromPosition) {
-                            mHeaderPositions.set(i, headerPos + itemCount);
-                            sortHeaderAtIndex(i);
-                        } else {
-                            break;
-                        }
+                    if (newHeaderPos != headerPos) {
+                        mHeaderPositions.set(i, newHeaderPos);
+                        sortHeaderAtIndex(i);
+                    } else {
+                        break;
                     }
                 }
             }

@@ -1,92 +1,89 @@
-这里介绍的其实都不属于BRV的内容, 但是由于很多开发者常问此需求, 故介绍下
+!!! question "RV如何更新列表"
+    列表数据来源于集合, 任何更新方法都是基于下面的封装
 
-> BRV的数据集合无论是`models`或`addData()`都是添加的`List<Any?>(任意对象数据集合)`. 所以只要是一个集合即可映射出一个列表 <br>
-> 如果数据不满足一个集合条件(或任何数据上的问题), 请自己处理下数据
+    1. 操作集合
+    2. 调用Adapter的`notifyXX`等方法通知RV更新视图
+
+
+BindingAdapter/RV新增以下扩展函数操作数据
+
+| 函数| 动画 | 描述  |
+|-|-|-|
+| models | 无动画 | 设置集合, 会`notifyDataChanged()` |
+| setDifferModels | 有动画 | 设置集合, 使用`DiffUtil.calculateDiff`来决定`notifyXX()`更新视图 |
+| addModels | 可选动画 | 添加/插入集合, 会`notifyDataChanged()` |
+| _data | 无动画 | 对应列表的集合对象, 需手动通知更新 |
 
 
 ## 添加数据
 
-使用BRV自带的两个函数添加数据会自动更新UI
-
-```kotlin
-rv.models = dataList // 自动使用 notifyDataSetChanged
-rv.addModels(newDataList)
-```
-
-代码示例
 ```kotlin
 binding.rv.linear().setup {
     addType<SimpleModel>(R.layout.item_simple)
-    onBind {
-        findView<TextView>(R.id.tv_simple).text = getModel<SimpleModel>().name
-    }
 }.models = getData()
+
+binding.rv.addModels(data, index = 3) // 插入到第四个
+binding.rv.models = newDataList // 覆盖列表
 ```
+!!! failure "同一个集合对象反复添加"
+    引用类型是传址, 反复添加同一个集合对象, 并不会更新列表, 这属于基本语法知识
 
+## 删除数据
 
-> 切记Java/Kotlin的引用类型是传址, 如果这两个函数操作的数据集都是同一个会导致问题 - 自己添加自己.  这种属于基本的语法问题
-
-## 对比数据刷新
-BRV可以根据新的数据集合和旧的数据集合对比判断来自动使用刷新动画
+比如删除第3条
 
 ```kotlin
-rv.setDifferModels(getRandomData())
+binding.rv.mutable.removeAt(2) // 删除数据
+binding.rv.bindingAdapter.notifyItemRemoved(2) // 通知更新
+// binding.rv.bindingAdapter.notifyDataChanged() 通知更新但无动画
 ```
-
-该函数内部使用Android自带工具`DiffUtil`进行数据对比刷新, 但是支持异步/同步线程对比
+批量删除
 ```kotlin
-fun setDifferModels(newModels: List<Any?>?, detectMoves: Boolean = true, commitCallback: Runnable? = null)
+binding.rv.mutable.run {
+    removeAt(1)
+    removeAt(2)
+    removeAt(3)
+}
+binding.rv.bindingAdapter.notifyItemRangeRemoved(1, 3) // 通知更新
+// binding.rv.bindingAdapter.notifyDataChanged() 通知更新但无动画
 ```
-> 数据对比默认使用`equals`函数对比, 你可以为数据手动实现equals函数来修改对比逻辑. 推荐定义数据为 data class, 因其会根据构造参数自动生成equals
 
-如果需要完全自定义对比数据的判断逻辑就实现`ItemDifferCallback`接口
+## 对比刷新
+新旧数据对比然后自动局部更新并展示对应动画
+
+```kotlin
+binding.rv.setDifferModels(getRandomData())
+```
+
+内部使用官方`DiffUtil`进行数据对比刷新, 并支持子线程, 自定义请实现`ItemDifferCallback`
 
 ```kotlin hl_lines="3"
 rv.linear().setup {
     addType<SimpleModel>(R.layout.item_simple)
-    itemDifferCallback = object : ItemDifferCallback {
-        override fun areContentsTheSame(oldItem: Any, newItem: Any): Boolean {
-            return if (oldItem is SimpleModel && newItem is SimpleModel) {
-                oldItem.name == newItem.name
-            } else super.areContentsTheSame(oldItem, newItem)
-        }
-    }
-    // ...
+    itemDifferCallback = MyItemDifferCallback()
 }.models = getRandomData(true)
 ```
 
+- [白屏动画](https://github.com/liangjingkanji/BRV/blob/5269ef245e7f312a0077194611f1c2aded647a3c/brv/src/main/java/com/drake/brv/listener/ItemDifferCallback.kt#L63)
+- [自定义对比条件](https://github.com/liangjingkanji/BRV/blob/5269ef245e7f312a0077194611f1c2aded647a3c/brv/src/main/java/com/drake/brv/listener/ItemDifferCallback.kt#L48)
+
 ## 局部刷新
 
-局部刷新某个或者批量Item的内容, 我们可以使用到两种方式
+指定刷新某个Item的数据
 
-1. `notifyItemChanged`等函数, 这个上面提过
-2. DataBinding本身就支持这个特性 (推荐此方法), 性能最高/方便. Demo中的[选择模式](https://github.com/liangjingkanji/BRV/blob/master/sample/src/main/java/com/drake/brv/sample/ui/fragment/CheckModeFragment.kt)就是如此实现
+1. 使用`notifyXX()`方法
+2. 使用DataBinding双向绑定特性, 数据变化会自动更新视图
 
-<br>
-BRV支持DataBinding绑定数据, DataBinding的数据模型如果继承Observable就可以自动更新UI
+!!! success "简单高效"
+    DataBinding 零代码, 最小范围(高性能), 不考虑索引
 
-```kotlin
-data class CheckModel(var checked: Boolean = false, var visibility: Boolean = false) : BaseObservable()
-```
+    扩展阅读: [DataBinding最全使用说明 ](https://juejin.cn/post/6844903549223059463)
 
-可以自动更新UI的字段类型, 这样可以不用整个数据模型继承BaseObservable
+## 通知更新
 
-- LiveData
-- ObservableField
+`BindingAdapter`继承`RecyclerView.Adapter`, 拥有父类的通知更新方法
 
-> 以上属于DataBinding使用基础, 具体请阅读: [DataBinding最全使用说明 ](https://juejin.cn/post/6844903549223059463)
-
-## 刷新函数
-
-BRV使用的是自定义的BindingAdapter, 其继承自`RecyclerView.Adapter`, 拥有其全部的数据刷新方法
-
-```kotlin
-class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolder>()
-```
-
-RecyclerView.Adapter场景的数据刷新方法有
-
-| 函数 | 描述 |
+| 刷新方法 | 描述 |
 |-|-|
 | notifyDataSetChanged | 全部数据刷新(不带动画) |
 | notifyItemChanged | 局部数据变更 |
@@ -97,14 +94,5 @@ RecyclerView.Adapter场景的数据刷新方法有
 | notifyItemRangeInserted | 指定范围内Item插入 |
 | notifyItemRangeRemoved | 指定范围内删除 |
 
-以上函数BRV全部支持, 具体使用请搜索: `RecycleView局部刷新`
-
-```kotlin
-rv_simple.linear().setup {
-    addType<SimpleModel>(R.layout.item_simple)
-}.models = dataList
-
-dataList.add(SimpleModel())
-
-rv_simple.bindingAdapter.notifyItemInserted(dataList.size) // 最后的位置有插入一个新的Item
-```
+!!! warning  "更新无效"
+    这些方法都是通知更新视图, 如果列表数据并没有发生改变那么是无效的

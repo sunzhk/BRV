@@ -1,23 +1,12 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-  ~ Copyright (C) 2018 Drake, Inc.
-  ~
-  ~ Licensed under the Apache License, Version 2.0 (the "License");
-  ~ you may not use this file except in compliance with the License.
-  ~ You may obtain a copy of the License at
-  ~
-  ~ http://www.apache.org/licenses/LICENSE-2.0
-  ~
-  ~ Unless required by applicable law or agreed to in writing, software
-  ~ distributed under the License is distributed on an "AS IS" BASIS,
-  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  ~ See the License for the specific language governing permissions and
-  ~ limitations under the License.
-  -->
+<?xml version="1.0" encoding="utf-8"?>
 
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
     <item
         android:id="@+id/linearHorizontalFragment"
         android:title="线性列表-水平分割线" />
+    <item
+        android:id="@+id/linearHorizontalMarginFragment"
+        android:title="线性列表-水平分割线-间隔" />
     <item
         android:id="@+id/linearVerticalDividerFragment"
         android:title="线性列表-垂直分割线" />
@@ -28,8 +17,20 @@
         android:id="@+id/gridVerticalDividerFragment"
         android:title="网格列表-垂直分割线" />
     <item
-        android:id="@+id/gridDividerFragment"
-        android:title="网格列表-网格分割线" />
+        android:id="@+id/gridDividerVerticalFragment"
+        android:title="网格列表-网格分割线-垂直" />
+    <item
+        android:id="@+id/gridDividerHorizontalFragment"
+        android:title="网格列表-网格分割线-水平" />
+    <item
+        android:id="@+id/gridMarginDividerFragment"
+        android:title="网格列表-网格分割线-间隔a" />
+    <item
+        android:id="@+id/gridMarginDividerBFragment"
+        android:title="网格列表-网格分割线-间隔b" />
+    <item
+        android:id="@+id/gridMarginDividerCFragment"
+        android:title="网格列表-网格分割线-间隔c" />
     <item
         android:id="@+id/staggeredDividerFragment"
         android:title="交错列表-网格分割线" />

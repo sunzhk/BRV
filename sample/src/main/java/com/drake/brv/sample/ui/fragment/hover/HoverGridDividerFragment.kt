@@ -1,19 +1,3 @@
-/*
- * Copyright (C) 2018 Drake, Inc.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.drake.brv.sample.ui.fragment.hover
 
 import android.view.View
@@ -23,10 +7,14 @@ import com.drake.brv.annotaion.DividerOrientation
 import com.drake.brv.listener.OnHoverAttachListener
 import com.drake.brv.sample.R
 import com.drake.brv.sample.databinding.FragmentHoverBinding
+import com.drake.brv.sample.model.Group2Model
+import com.drake.brv.sample.model.Group3Model
 import com.drake.brv.sample.model.HoverHeaderModel
-import com.drake.brv.sample.model.Model
-import com.drake.brv.sample.model.NestedGroupModel
-import com.drake.brv.utils.*
+import com.drake.brv.utils.divider
+import com.drake.brv.utils.grid
+import com.drake.brv.utils.linear
+import com.drake.brv.utils.models
+import com.drake.brv.utils.setup
 import com.drake.tooltip.toast
 
 
@@ -38,23 +26,23 @@ class HoverGridDividerFragment : BaseHoverFragment<FragmentHoverBinding>(R.layou
         binding.rv.linear().setup {
 
             onCreate {
-                if (it == R.layout.item_simple_list) { // 构建嵌套网格列表
+                if (itemViewType == R.layout.item_rv) { // 构建嵌套网格列表
                     findView<RecyclerView>(R.id.rv).divider { // 构建间距
                         setDivider(20)
                         includeVisible = true
                         orientation = DividerOrientation.GRID
                     }.grid(2).setup {
-                        addType<Model>(R.layout.item_multi_type_simple_none_margin)
+                        addType<Group3Model>(R.layout.item_group_none_margin)
                     }
                 }
             }
             onBind {
-                if (itemViewType == R.layout.item_simple_list) { // 为嵌套的网格列表赋值数据
+                if (itemViewType == R.layout.item_rv) { // 为嵌套的网格列表赋值数据
                     findView<RecyclerView>(R.id.rv).models =
-                        getModel<NestedGroupModel>().itemSublist
+                        getModel<Group2Model>().getItemSublist()
                 }
             }
-            addType<NestedGroupModel>(R.layout.item_simple_list)
+            addType<Group2Model>(R.layout.item_rv)
             addType<HoverHeaderModel>(R.layout.item_hover_header)
 
             // 点击事件
@@ -81,13 +69,13 @@ class HoverGridDividerFragment : BaseHoverFragment<FragmentHoverBinding>(R.layou
     private fun getData(): List<Any> {
         return listOf(
             HoverHeaderModel(),
-            NestedGroupModel(),
+            Group2Model(),
             HoverHeaderModel(),
-            NestedGroupModel(),
+            Group2Model(),
             HoverHeaderModel(),
-            NestedGroupModel(),
+            Group2Model(),
             HoverHeaderModel(),
-            NestedGroupModel(),
+            Group2Model(),
         )
     }
 
