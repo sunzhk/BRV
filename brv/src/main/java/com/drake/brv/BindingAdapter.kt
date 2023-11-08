@@ -27,6 +27,7 @@
 package com.drake.brv
 
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -91,8 +92,9 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
      */
     var modelId: Int = BRV.modelId
 
-    companion object {}
-
+    companion object {
+        private const val TAG: String = "BindingAdapter"
+    }
 
     // <editor-fold desc="生命周期">
     private var onCreate: (BindingViewHolder.(viewType: Int) -> Unit)? = null
@@ -101,7 +103,7 @@ open class BindingAdapter : RecyclerView.Adapter<BindingAdapter.BindingViewHolde
     private var onClick: (BindingViewHolder.(viewId: Int) -> Unit)? = null
     private var onLongClick: (BindingViewHolder.(viewId: Int) -> Unit)? = null
     private var onChecked: ((position: Int, checked: Boolean, allChecked: Boolean) -> Unit)? = null
-    private var onToggle: ((position: Int, toggleMode: Boolean, end: Boolean) -> Unit)? = null = null
+    private var onToggle: ((position: Int, toggleMode: Boolean, end: Boolean) -> Unit)? = null
     private var onDrag: ((startPosition: Int, endPosition: Int) -> Unit)? = null
     private var onMove: ((source: BindingAdapter.BindingViewHolder, target: BindingAdapter.BindingViewHolder) -> Unit)? = null
     private var onItemLongClick: (BindingAdapter.BindingViewHolder.() -> Unit)? = null

@@ -27,6 +27,15 @@ allprojects {
     }
 }
 
+ext {
+    maven_path                = 'http://nexus.closeli.cc/repository/oep/'
+    maven_user_name           = 'cy8166'
+    maven_password            = 'Closeli01'
+    map_function_version      = '1.0.0.19'
+    ability_version           = '1.0.0.27'
+    module_group_id           = 'com.closeli.widget'
+}
+
 task clean(type: Delete) {
     delete rootProject.buildDir
 }

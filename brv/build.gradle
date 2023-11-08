@@ -3,6 +3,10 @@ apply plugin: "com.android.library"
 apply plugin: "kotlin-android"
 apply plugin: "kotlin-kapt"
 
+apply from: '../publish_maven.gradle'
+updateArtifactId("brv-fork")
+updateModuleVersion("test_1.0.0.0")
+preparePublish()
 
 android {
     compileSdkVersion 30
@@ -20,6 +24,10 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
+    }
+
+    buildFeatures {
+        viewBinding = true
     }
 
 }

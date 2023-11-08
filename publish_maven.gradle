@@ -1,0 +1,116 @@
+apply plugin: 'maven-publish'
+
+task androidSourcesJar(type: Jar) {
+    archiveClassifier.set('sources')
+    try {
+        from android.sourceSets.main.java.srcDirs
+    } catch(t) {
+        try {
+            from sourceSets.main.java.srcDirs
+        } catch (t2) {
+            t.printStackTrace()
+            t2.printStackTrace()
+        }
+    }
+}
+
+project.ext.env = this
+project.ext.androidSourcesJarTask = androidSourcesJar
+project.ext.moduleArtifactId = project.name
+project.ext.moduleVersion = "default_1.0.0"
+
+def updateArtifactId(String artifactId) {
+    println "artifactId=${artifactId}"
+    project.ext.moduleArtifactId = artifactId
+}
+def updateModuleVersion(String moduleVersion) {
+    println "moduleVersion=${moduleVersion}"
+    project.ext.moduleVersion = moduleVersion
+}
+
+def preparePublish() {
+    project.ext.env.publishing {
+        publications {
+            plugin(MavenPublication) {
+                afterEvaluate {
+                    artifact(tasks.getByName("bundleReleaseAar"))
+                } // 方式一：生成aar包
+                println ">>>>>>>> in publish, artifactId=${project.ext.moduleArtifactId}"
+                artifactId "${project.ext.moduleArtifactId}"
+                groupId rootProject.ext.module_group_id
+                version project.ext.moduleVersion
+                artifact project.ext.androidSourcesJarTask
+                //依赖关系
+                pom.withXml{
+                    def dependenciesNode = asNode().appendNode("dependencies")
+                    configurations.implementation.allDependencies.forEach(){
+                        Dependency dependency ->
+                            if (dependency.version != "unspecified" && dependency.name != "unspecified"){
+                                def dependencyNode = dependenciesNode.appendNode('dependency')
+                                dependencyNode.appendNode('groupId', dependency.group)
+                                dependencyNode.appendNode('artifactId', dependency.name)
+                                dependencyNode.appendNode('version', dependency.version)
+                            }
+                    }
+                }
+            }
+        }
+        repositories {
+            maven {
+                allowInsecureProtocol = true
+                credentials {
+                    username = rootProject.ext.maven_user_name
+                    password = rootProject.ext.maven_password
+                }
+                url = rootProject.ext.maven_path
+            }
+        }
+    }
+}
+
+def preparePublishJar() {
+    project.ext.env.publishing {
+        publications {
+            plugin(MavenPublication) {
+                println ">>>>>>>> in publish, artifactId=${project.ext.moduleArtifactId}"
+                from components.java
+                artifactId "${project.ext.moduleArtifactId}"
+                groupId rootProject.ext.module_group_id
+                version project.ext.moduleVersion
+                artifact project.ext.androidSourcesJarTask
+                //依赖关系
+//                pom.withXml{
+//                    def dependenciesNode = asNode().appendNode("dependencies")
+//                    configurations.implementation.allDependencies.forEach(){
+//                        Dependency dependency ->
+//                            if (dependency.version != "unspecified" && dependency.name != "unspecified"){
+//                                def dependencyNode = dependenciesNode.appendNode('dependency')
+//                                dependencyNode.appendNode('groupId', dependency.group)
+//                                dependencyNode.appendNode('artifactId', dependency.name)
+//                                dependencyNode.appendNode('version', dependency.version)
+//                            }
+//                    }
+//                }
+            }
+        }
+        repositories {
+            maven {
+                allowInsecureProtocol = true
+                credentials {
+                    username = rootProject.ext.maven_user_name
+                    password = rootProject.ext.maven_password
+                }
+                url = rootProject.ext.maven_path
+            }
+        }
+    }
+}
+
+ext {
+    updateArtifactId = this.&updateArtifactId
+    updateModuleVersion = this.&updateModuleVersion
+    preparePublish = this.&preparePublish
+    preparePublishJar = this.&preparePublishJar
+    androidSourcesJar = this.&androidSourcesJar
+    publish = this.&publish
+}
