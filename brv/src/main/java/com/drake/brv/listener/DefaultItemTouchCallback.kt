@@ -190,6 +190,11 @@ open class DefaultItemTouchCallback(
             adapter.notifyItemMoved(currentPosition, targetPosition)
             sourceViewHolder = source
             targetViewHolder = target
+            onMove?.invoke(source, target)
+            if (startPosition == null) {
+                startPosition = sourceViewHolder?.modelPosition
+            }
+            endPosition = targetViewHolder?.modelPosition
             return true
         }
         return false
